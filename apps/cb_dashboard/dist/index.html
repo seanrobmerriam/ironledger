@@ -234,7 +234,7 @@
     <script src="wasm_exec.js"></script>
     <script>
         const go = new Go();
-        WebAssembly.instantiateStreaming(fetch("ironledger.wasm"), go.importObject).then((result) => {
+        WebAssembly.instantiateStreaming(fetch("ironledger.wasm?v=5"), go.importObject).then((result) => {
             go.run(result.instance);
         }).catch((err) => {
             document.getElementById('root').innerHTML = '<div class="alert alert-danger">Error loading WebAssembly: ' + err.message + '</div>';

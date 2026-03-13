@@ -14,7 +14,7 @@ handle(<<"POST">>, Req, State) ->
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     case jsone:try_decode(Body) of
         {ok, #{<<"party_id">> := PartyId, <<"currency">> := CurrencyBin, <<"name">> := Name}, _} ->
-            Currency = binary_to_existing_atom(CurrencyBin, utf8),
+            Currency = binary_to_atom(CurrencyBin, utf8),
             case cb_accounts:create_account(PartyId, Name, Currency) of
                 {ok, Account} ->
                     Resp = account_to_json(Account),

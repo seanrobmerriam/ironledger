@@ -6,7 +6,7 @@ import (
 	"syscall/js"
 )
 
-const apiBaseURL = "http://localhost:8081/api/v1"
+const apiBaseURL = "http://127.0.0.1:8081/api/v1"
 
 // fetch makes an HTTP request using the browser's fetch API
 func fetch(method, url string, body interface{}) (js.Value, error) {
@@ -176,12 +176,15 @@ func (a *App) CloseParty(this js.Value, args []js.Value) interface{} {
 // CreateAccount creates a new account
 func (a *App) CreateAccount(this js.Value, args []js.Value) interface{} {
 	if len(args) < 3 {
+		logMsg(ERROR, "CreateAccount called with insufficient args", map[string]interface{}{"count": len(args)})
 		return nil
 	}
 
 	partyID := args[0].String()
 	name := args[1].String()
 	currency := args[2].String()
+
+	logMsg(INFO, "CreateAccount called", map[string]interface{}{"partyID": partyID, "name": name, "currency": currency})
 
 	body := map[string]string{
 		"party_id": partyID,
@@ -190,10 +193,14 @@ func (a *App) CreateAccount(this js.Value, args []js.Value) interface{} {
 	}
 
 	go func() {
-		_, err := fetch("POST", apiBaseURL+"/accounts", body)
+		url := apiBaseURL + "/accounts"
+		logMsg(INFO, "API request", map[string]interface{}{"method": "POST", "url": url})
+		_, err := fetch("POST", url, body)
 		if err != nil {
+			logMsg(ERROR, "API request failed", map[string]interface{}{"error": err.Error()})
 			a.Error = err.Error()
 		} else {
+			logMsg(INFO, "API request succeeded", map[string]interface{}{"action": "createAccount"})
 			a.Error = ""
 			a.ListAccounts(js.Value{}, []js.Value{js.ValueOf(partyID)})
 		}

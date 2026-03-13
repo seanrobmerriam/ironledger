@@ -253,7 +253,7 @@ func (a *App) renderAccountsView() js.Value {
 	// Table header
 	thead := doc.Call("createElement", "thead")
 	theadRow := doc.Call("createElement", "tr")
-	headers := []string{"Name", "Currency", "Balance", "Status", "Actions"}
+	headers := []string{"Account ID", "Name", "Currency", "Balance", "Status", "Actions"}
 	for _, h := range headers {
 		th := doc.Call("createElement", "th")
 		th.Set("textContent", h)
@@ -267,6 +267,10 @@ func (a *App) renderAccountsView() js.Value {
 
 	for _, account := range a.Accounts {
 		row := doc.Call("createElement", "tr")
+
+		idCell := doc.Call("createElement", "td")
+		idCell.Set("textContent", account.AccountID)
+		row.Call("appendChild", idCell)
 
 		nameCell := doc.Call("createElement", "td")
 		nameCell.Set("textContent", account.Name)

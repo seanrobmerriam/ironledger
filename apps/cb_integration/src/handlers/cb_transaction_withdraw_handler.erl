@@ -19,7 +19,7 @@ handle(<<"POST">>, Req, State) ->
             <<"currency">> := CurrencyBin,
             <<"description">> := Description
         }, _} ->
-            Currency = binary_to_existing_atom(CurrencyBin, utf8),
+            Currency = binary_to_atom(CurrencyBin, utf8),
             case cb_payments:withdraw(IdempotencyKey, SourceId, Amount, Currency, Description) of
                 {ok, Txn} ->
                     Resp = transaction_to_json(Txn),
