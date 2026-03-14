@@ -37,7 +37,11 @@ func main() {
 		"fetchDashboardStats": js.FuncOf(app.FetchDashboardStats),
 	}))
 
-	// Fetch initial dashboard stats
+	// Render the UI immediately before fetching data
+	// This ensures the dashboard shows even if the API isn't available yet
+	app.Render()
+
+	// Fetch initial dashboard stats in the background
 	app.FetchDashboardStats(js.Value{}, nil)
 
 	// Keep the program running
