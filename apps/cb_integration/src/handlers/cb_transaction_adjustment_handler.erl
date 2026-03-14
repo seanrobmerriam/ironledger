@@ -1,4 +1,4 @@
--module(cb_transaction_transfer_handler).
+-module(cb_transaction_adjustment_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").
 
@@ -14,14 +14,13 @@ handle(<<"POST">>, Req, State) ->
     case jsone:try_decode(Body) of
         {ok, #{
             <<"idempotency_key">> := IdempotencyKey,
-            <<"source_account_id">> := SourceId,
-            <<"dest_account_id">> := DestId,
+            <<"account_id">> := AccountId,
             <<"amount">> := Amount,
             <<"currency">> := CurrencyBin,
             <<"description">> := Description
         }, _} ->
-            Currency = binary_to_existing_atom(CurrencyBin, utf8),
-            case cb_payments:transfer(IdempotencyKey, SourceId, DestId, Amount, Currency, Description) of
+            Currency = binary_to_atom(CurrencyBin, utf8),
+            case cb_payments:adjust_balance(IdempotencyKey, AccountId, Amount, Currency, Description) of
                 {ok, Txn} ->
                     Resp = transaction_to_json(Txn),
                     Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),

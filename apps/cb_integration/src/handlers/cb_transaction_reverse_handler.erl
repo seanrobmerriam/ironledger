@@ -7,7 +7,7 @@
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req, State) ->
     Method = cowboy_req:method(Req),
-    TxnId = cowboy_req:binding(txn_id, Req),
+    TxnId = cowboy_req:binding(<<"txn_id">>, Req),
     handle(Method, TxnId, Req, State).
 
 handle(<<"POST">>, TxnId, Req, State) ->

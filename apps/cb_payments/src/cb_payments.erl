@@ -6,6 +6,7 @@
     transfer/6,
     deposit/5,
     withdraw/5,
+    adjust_balance/5,
     get_transaction/1,
     list_transactions_for_account/3,
     reverse_transaction/1
@@ -492,3 +493,90 @@ validate_amount(Amount) when Amount > ?MAX_AMOUNT ->
     {error, amount_overflow};
 validate_amount(_Amount) ->
     ok.
+
+%% @doc Adjust an account balance (positive adds, negative subtracts).
+-spec adjust_balance(binary(), uuid(), integer(), currency(), binary()) ->
+    {ok, #transaction{}} | {error, atom()}.
+adjust_balance(_IdempotencyKey, _AccountId, 0, _Currency, _Description) ->
+    {error, zero_amount};
+adjust_balance(_IdempotencyKey, _AccountId, Amount, _Currency, _Description) when Amount > ?MAX_AMOUNT ->
+    {error, amount_overflow};
+adjust_balance(IdempotencyKey, AccountId, Amount, Currency, Description) ->
+    F = fun() ->
+        case mnesia:index_read(transaction, IdempotencyKey, idempotency_key) of
+            [Existing] ->
+                {ok, Existing};
+            [] ->
+                case mnesia:read(account, AccountId, write) of
+                    [] ->
+                        {error, account_not_found};
+                    [Account] ->
+                        case validate_account_for_adjustment(Account, Currency, Amount) of
+                            ok ->
+                                Now = erlang:system_time(millisecond),
+                                NewBalance = Account#account.balance + Amount,
+                                mnesia:write(Account#account{
+                                    balance = NewBalance,
+                                    updated_at = Now
+                                }),
+
+                                TxnId = uuid:uuid_to_string(uuid:get_v4(), binary_standard),
+                                Txn = #transaction{
+                                    txn_id = TxnId,
+                                    idempotency_key = IdempotencyKey,
+                                    txn_type = adjustment,
+                                    status = posted,
+                                    amount = erlang:abs(Amount),
+                                    currency = Currency,
+                                    source_account_id = undefined,
+                                    dest_account_id = AccountId,
+                                    description = Description,
+                                    created_at = Now,
+                                    posted_at = Now
+                                },
+                                mnesia:write(Txn),
+
+                                EntryId = uuid:uuid_to_string(uuid:get_v4(), binary_standard),
+                                EntryType = case Amount > 0 of
+                                    true -> credit;
+                                    false -> debit
+                                end,
+                                mnesia:write(#ledger_entry{
+                                    entry_id = EntryId,
+                                    txn_id = TxnId,
+                                    account_id = AccountId,
+                                    entry_type = EntryType,
+                                    amount = erlang:abs(Amount),
+                                    currency = Currency,
+                                    description = Description,
+                                    posted_at = Now
+                                }),
+
+                                {ok, Txn};
+                            Error ->
+                                Error
+                        end
+                end
+        end
+    end,
+    case mnesia:transaction(F) of
+        {atomic, Result} -> Result;
+        {aborted, _Reason} -> {error, database_error}
+    end.
+
+%% @private Validate account for adjustment.
+-spec validate_account_for_adjustment(#account{}, currency(), integer()) -> ok | {error, atom()}.
+validate_account_for_adjustment(Account, Currency, Amount) ->
+    case Account#account.status of
+        frozen -> {error, account_frozen};
+        closed -> {error, account_closed};
+        active ->
+            case Account#account.currency =:= Currency of
+                false -> {error, currency_mismatch};
+                true ->
+                    case Amount < 0 andalso (Account#account.balance + Amount) < 0 of
+                        true -> {error, insufficient_funds};
+                        false -> ok
+                    end
+            end
+    end.

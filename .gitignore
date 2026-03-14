@@ -53,3 +53,6 @@ logs/
 # Test output
 ct_logs/
 .test/
+
+# Docs
+docs/

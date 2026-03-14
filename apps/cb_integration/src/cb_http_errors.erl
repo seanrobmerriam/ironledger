@@ -32,6 +32,8 @@ to_response(party_has_active_accounts) ->
     {409, <<"party_has_active_accounts">>, <<"Party has active accounts">>};
 to_response(party_already_suspended) ->
     {409, <<"party_already_suspended">>, <<"Party is already suspended">>};
+to_response(party_not_suspended) ->
+    {409, <<"party_not_suspended">>, <<"Party is not suspended">>};
 to_response(email_already_exists) ->
     {409, <<"email_already_exists">>, <<"Email already exists">>};
 

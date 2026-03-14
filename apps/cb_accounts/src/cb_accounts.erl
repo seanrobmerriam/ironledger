@@ -5,6 +5,7 @@
 -export([
     create_account/3,
     get_account/1,
+    list_accounts/2,
     list_accounts_for_party/3,
     freeze_account/1,
     unfreeze_account/1,
@@ -68,6 +69,29 @@ get_account(AccountId) ->
         {atomic, Result} -> Result;
         {aborted, _Reason} -> {error, database_error}
     end.
+
+%% @doc List all accounts with pagination.
+-spec list_accounts(pos_integer(), pos_integer()) ->
+    {ok, #{items => [#account{}], total => non_neg_integer(), page => pos_integer(), page_size => pos_integer()}} |
+    {error, atom()}.
+list_accounts(Page, PageSize) when Page >= 1, PageSize >= 1, PageSize =< 100 ->
+    F = fun() ->
+        AllAccounts = mnesia:select(account, [{'_', [], ['$_']}]),
+        Sorted = lists:sort(
+            fun(A, B) -> A#account.created_at >= B#account.created_at end,
+            AllAccounts
+        ),
+        Total = length(Sorted),
+        Offset = (Page - 1) * PageSize,
+        Items = lists:sublist(Sorted, Offset + 1, PageSize),
+        #{items => Items, total => Total, page => Page, page_size => PageSize}
+    end,
+    case mnesia:transaction(F) of
+        {atomic, Result} -> {ok, Result};
+        {aborted, _Reason} -> {error, database_error}
+    end;
+list_accounts(_, _) ->
+    {error, invalid_pagination}.
 
 %% @doc List accounts for a party with pagination.
 -spec list_accounts_for_party(uuid(), pos_integer(), pos_integer()) ->

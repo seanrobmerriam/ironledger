@@ -1,23 +1,19 @@
--module(cb_transaction_entries_handler).
+-module(cb_savings_products_list_handler).
 
--include_lib("cb_ledger/include/cb_ledger.hrl").
+-include_lib("cb_savings_products/include/savings_product.hrl").
 
 -export([init/2]).
 
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req, State) ->
     Method = cowboy_req:method(Req),
-    TxnId = cowboy_req:binding(<<"txn_id">>, Req),
-    handle(Method, TxnId, Req, State).
+    handle(Method, Req, State).
 
-handle(<<"GET">>, TxnId, Req, State) ->
-    case cb_ledger:get_entries_for_transaction(TxnId) of
-        {ok, Entries} ->
+handle(<<"GET">>, Req, State) ->
+    case cb_savings_products:list_products() of
+        {ok, Products} ->
             Resp = #{
-                items => [entry_to_json(E) || E <- Entries],
-                total => length(Entries),
-                page => 1,
-                page_size => length(Entries)
+                items => [product_to_json(P) || P <- Products]
             },
             Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
             Req2 = cowboy_req:reply(200, Headers, jsone:encode(Resp), Req),
@@ -30,23 +26,26 @@ handle(<<"GET">>, TxnId, Req, State) ->
             {ok, Req2, State}
     end;
 
-handle(<<"OPTIONS">>, _TxnId, Req, State) ->
+handle(<<"OPTIONS">>, Req, State) ->
     Req2 = cb_cors:reply_preflight(Req),
     {ok, Req2, State};
 
-handle(_, _TxnId, Req, State) ->
+handle(_, Req, State) ->
     Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
     Req2 = cowboy_req:reply(405, Headers, <<"{\"error\": \"method_not_allowed\"}">>, Req),
     {ok, Req2, State}.
 
-entry_to_json(Entry) ->
+product_to_json(Product) ->
     #{
-        entry_id => Entry#ledger_entry.entry_id,
-        txn_id => Entry#ledger_entry.txn_id,
-        account_id => Entry#ledger_entry.account_id,
-        entry_type => Entry#ledger_entry.entry_type,
-        amount => Entry#ledger_entry.amount,
-        currency => Entry#ledger_entry.currency,
-        description => Entry#ledger_entry.description,
-        posted_at => Entry#ledger_entry.posted_at
+        product_id => Product#savings_product.product_id,
+        name => Product#savings_product.name,
+        description => Product#savings_product.description,
+        currency => Product#savings_product.currency,
+        interest_rate => Product#savings_product.interest_rate,
+        interest_type => Product#savings_product.interest_type,
+        compounding_period => Product#savings_product.compounding_period,
+        minimum_balance => Product#savings_product.minimum_balance,
+        status => Product#savings_product.status,
+        created_at => Product#savings_product.created_at,
+        updated_at => Product#savings_product.updated_at
     }.

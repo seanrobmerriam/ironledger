@@ -7,10 +7,9 @@
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req, State) ->
     Method = cowboy_req:method(Req),
-    AccountId = cowboy_req:binding(account_id, Req),
-    Qs = cowboy_req:parse_qs(Req),
-    Page = binary_to_integer(proplists:get_value(<<"page">>, Qs, <<"1">>)),
-    PageSize = binary_to_integer(proplists:get_value(<<"page_size">>, Qs, <<"20">>)),
+    AccountId = cowboy_req:binding(<<"account_id">>, Req),
+    Page = binary_to_integer(cowboy_req:binding(<<"page">>, Req, <<"1">>)),
+    PageSize = binary_to_integer(cowboy_req:binding(<<"page_size">>, Req, <<"20">>)),
     handle(Method, AccountId, Page, PageSize, Req, State).
 
 handle(<<"GET">>, AccountId, Page, PageSize, Req, State) ->

@@ -8,6 +8,15 @@ import (
 
 const apiBaseURL = "http://127.0.0.1:8081/api/v1"
 
+// StatsResponse represents the dashboard stats response
+type StatsResponse struct {
+	TotalCustomers int   `json:"total_customers"`
+	TotalAccounts  int   `json:"total_accounts"`
+	TotalBalance   int64 `json:"total_balance"`
+	TodayTxns      int   `json:"today_txns"`
+	PendingTxns    int   `json:"pending_txns"`
+}
+
 // fetch makes an HTTP request using the browser's fetch API
 func fetch(method, url string, body interface{}) (js.Value, error) {
 	// Create request options
@@ -176,15 +185,12 @@ func (a *App) CloseParty(this js.Value, args []js.Value) interface{} {
 // CreateAccount creates a new account
 func (a *App) CreateAccount(this js.Value, args []js.Value) interface{} {
 	if len(args) < 3 {
-		logMsg(ERROR, "CreateAccount called with insufficient args", map[string]interface{}{"count": len(args)})
 		return nil
 	}
 
 	partyID := args[0].String()
 	name := args[1].String()
 	currency := args[2].String()
-
-	logMsg(INFO, "CreateAccount called", map[string]interface{}{"partyID": partyID, "name": name, "currency": currency})
 
 	body := map[string]string{
 		"party_id": partyID,
@@ -193,14 +199,10 @@ func (a *App) CreateAccount(this js.Value, args []js.Value) interface{} {
 	}
 
 	go func() {
-		url := apiBaseURL + "/accounts"
-		logMsg(INFO, "API request", map[string]interface{}{"method": "POST", "url": url})
-		_, err := fetch("POST", url, body)
+		_, err := fetch("POST", apiBaseURL+"/accounts", body)
 		if err != nil {
-			logMsg(ERROR, "API request failed", map[string]interface{}{"error": err.Error()})
 			a.Error = err.Error()
 		} else {
-			logMsg(INFO, "API request succeeded", map[string]interface{}{"action": "createAccount"})
 			a.Error = ""
 			a.ListAccounts(js.Value{}, []js.Value{js.ValueOf(partyID)})
 		}
@@ -514,12 +516,235 @@ func (a *App) GetLedgerEntries(this js.Value, args []js.Value) interface{} {
 	accountID := args[0].String()
 
 	go func() {
-		_, err := fetch("GET", apiBaseURL+"/accounts/"+accountID+"/entries", nil)
+		result, err := fetch("GET", apiBaseURL+"/accounts/"+accountID+"/entries", nil)
 		if err != nil {
 			a.Error = err.Error()
 		} else {
 			a.Error = ""
+			itemsJSON := js.Global().Get("JSON").Call("stringify", result.Get("items")).String()
+			json.Unmarshal([]byte(itemsJSON), &a.LedgerEntries)
 		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// FetchDashboardStats fetches dashboard statistics
+func (a *App) FetchDashboardStats(this js.Value, args []js.Value) interface{} {
+	a.Loading = true
+	a.Render()
+
+	go func() {
+		// Fetch all parties to count customers
+		partiesResult, partiesErr := fetch("GET", apiBaseURL+"/parties", nil)
+		if partiesErr == nil {
+			itemsJSON := js.Global().Get("JSON").Call("stringify", partiesResult.Get("items")).String()
+			var parties []Party
+			json.Unmarshal([]byte(itemsJSON), &parties)
+			a.Stats.TotalCustomers = len(parties)
+		}
+
+		// Fetch all accounts - we'll need to iterate through parties
+		partiesResult2, _ := fetch("GET", apiBaseURL+"/parties", nil)
+		var allAccounts []Account
+		if partiesResult2.Get("items").Truthy() {
+			itemsJSON := js.Global().Get("JSON").Call("stringify", partiesResult2.Get("items")).String()
+			var parties []Party
+			json.Unmarshal([]byte(itemsJSON), &parties)
+
+			for _, party := range parties {
+				accResult, _ := fetch("GET", apiBaseURL+"/parties/"+party.PartyID+"/accounts", nil)
+				if accResult.Get("items").Truthy() {
+					accItemsJSON := js.Global().Get("JSON").Call("stringify", accResult.Get("items")).String()
+					var accounts []Account
+					json.Unmarshal([]byte(accItemsJSON), &accounts)
+					allAccounts = append(allAccounts, accounts...)
+				}
+			}
+		}
+		a.Stats.TotalAccounts = len(allAccounts)
+
+		// Calculate total balance
+		var totalBalance int64
+		for _, acc := range allAccounts {
+			totalBalance += acc.Balance
+		}
+		a.Stats.TotalBalance = totalBalance
+
+		// For now, set today's transactions to a placeholder
+		// In production, this would come from an API endpoint
+		a.Stats.TodayTxns = 0
+
+		// Fetch recent transactions for activity feed
+		a.RecentActivity = []ActivityItem{}
+		if len(allAccounts) > 0 {
+			txnResult, txnErr := fetch("GET", apiBaseURL+"/accounts/"+allAccounts[0].AccountID+"/transactions", nil)
+			if txnErr == nil && txnResult.Get("items").Truthy() {
+				itemsJSON := js.Global().Get("JSON").Call("stringify", txnResult.Get("items")).String()
+				var txns []Transaction
+				json.Unmarshal([]byte(itemsJSON), &txns)
+
+				// Take first 5 as recent activity
+				if len(txns) > 5 {
+					txns = txns[:5]
+				}
+
+				for _, txn := range txns {
+					activity := ActivityItem{
+						ID:          txn.TxnID,
+						Type:        txn.TxnType,
+						Description: txn.Description,
+						Timestamp:   txn.CreatedAt,
+						Amount:      txn.Amount,
+						Currency:    txn.Currency,
+					}
+					a.RecentActivity = append(a.RecentActivity, activity)
+				}
+			}
+		}
+
+		a.Loading = false
+		a.Render()
+	}()
+
+	return nil
+}
+
+// ListAllAccounts fetches all accounts across all parties
+func (a *App) ListAllAccounts(this js.Value, args []js.Value) interface{} {
+	a.Loading = true
+	a.Render()
+
+	go func() {
+		partiesResult, err := fetch("GET", apiBaseURL+"/parties", nil)
+		if err != nil {
+			a.Error = err.Error()
+			a.Loading = false
+			a.Render()
+			return
+		}
+
+		itemsJSON := js.Global().Get("JSON").Call("stringify", partiesResult.Get("items")).String()
+		var parties []Party
+		json.Unmarshal([]byte(itemsJSON), &parties)
+
+		var allAccounts []Account
+		for _, party := range parties {
+			accResult, _ := fetch("GET", apiBaseURL+"/parties/"+party.PartyID+"/accounts", nil)
+			if accResult.Get("items").Truthy() {
+				accItemsJSON := js.Global().Get("JSON").Call("stringify", accResult.Get("items")).String()
+				var accounts []Account
+				json.Unmarshal([]byte(accItemsJSON), &accounts)
+				allAccounts = append(allAccounts, accounts...)
+			}
+		}
+
+		a.Accounts = allAccounts
+		a.Loading = false
+		a.Render()
+	}()
+
+	return nil
+}
+
+// ListAllTransactions fetches all transactions
+func (a *App) ListAllTransactions(this js.Value, args []js.Value) interface{} {
+	a.Loading = true
+	a.Render()
+
+	go func() {
+		// First get all accounts
+		partiesResult, err := fetch("GET", apiBaseURL+"/parties", nil)
+		if err != nil {
+			a.Error = err.Error()
+			a.Loading = false
+			a.Render()
+			return
+		}
+
+		itemsJSON := js.Global().Get("JSON").Call("stringify", partiesResult.Get("items")).String()
+		var parties []Party
+		json.Unmarshal([]byte(itemsJSON), &parties)
+
+		var allAccounts []Account
+		for _, party := range parties {
+			accResult, _ := fetch("GET", apiBaseURL+"/parties/"+party.PartyID+"/accounts", nil)
+			if accResult.Get("items").Truthy() {
+				accItemsJSON := js.Global().Get("JSON").Call("stringify", accResult.Get("items")).String()
+				var accounts []Account
+				json.Unmarshal([]byte(accItemsJSON), &accounts)
+				allAccounts = append(allAccounts, accounts...)
+			}
+		}
+
+		// Now get transactions for each account
+		var allTxns []Transaction
+		seen := make(map[string]bool)
+		for _, account := range allAccounts {
+			txnResult, _ := fetch("GET", apiBaseURL+"/accounts/"+account.AccountID+"/transactions", nil)
+			if txnResult.Get("items").Truthy() {
+				txnItemsJSON := js.Global().Get("JSON").Call("stringify", txnResult.Get("items")).String()
+				var txns []Transaction
+				json.Unmarshal([]byte(txnItemsJSON), &txns)
+				for _, txn := range txns {
+					if !seen[txn.TxnID] {
+						seen[txn.TxnID] = true
+						allTxns = append(allTxns, txn)
+					}
+				}
+			}
+		}
+
+		a.Transactions = allTxns
+		a.Loading = false
+		a.Render()
+	}()
+
+	return nil
+}
+
+// GetAccountDetails fetches account details including transactions
+func (a *App) GetAccountDetails(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return nil
+	}
+
+	accountID := args[0].String()
+	a.Loading = true
+	a.Render()
+
+	go func() {
+		// Get balance
+		balanceResult, err := fetch("GET", apiBaseURL+"/accounts/"+accountID+"/balance", nil)
+		if err != nil {
+			a.Error = err.Error()
+		} else {
+			var balance BalanceResponse
+			resultJSON := js.Global().Get("JSON").Call("stringify", balanceResult).String()
+			json.Unmarshal([]byte(resultJSON), &balance)
+			if a.SelectedAccount != nil {
+				a.SelectedAccount.Balance = balance.Balance
+			}
+		}
+
+		// Get transactions
+		txnResult, err := fetch("GET", apiBaseURL+"/accounts/"+accountID+"/transactions", nil)
+		if err != nil {
+			a.Error = err.Error()
+		} else {
+			itemsJSON := js.Global().Get("JSON").Call("stringify", txnResult.Get("items")).String()
+			json.Unmarshal([]byte(itemsJSON), &a.Transactions)
+		}
+
+		// Get ledger entries
+		ledgerResult, err := fetch("GET", apiBaseURL+"/accounts/"+accountID+"/entries", nil)
+		if err == nil {
+			itemsJSON := js.Global().Get("JSON").Call("stringify", ledgerResult.Get("items")).String()
+			json.Unmarshal([]byte(itemsJSON), &a.LedgerEntries)
+		}
+
+		a.Loading = false
 		a.Render()
 	}()
 

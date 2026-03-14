@@ -1,0 +1,15 @@
+{application, cb_interest, [
+    {description, "Interest calculation and accrual for IronLedger"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {cb_interest_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        mnesia,
+        cb_ledger,
+        cb_accounts,
+        cb_savings_products
+    ]},
+    {env, []}
+]}.

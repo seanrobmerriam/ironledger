@@ -1,0 +1,14 @@
+{application, cb_savings_products, [
+    {description, "Savings products management for IronLedger"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {cb_savings_products_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        mnesia,
+        cb_ledger,
+        cb_accounts
+    ]},
+    {env, []}
+]}.

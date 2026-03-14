@@ -14,11 +14,14 @@ dispatch() ->
             {<<"/api/v1/parties">>, cb_parties_handler, []},
             {<<"/api/v1/parties/:party_id">>, cb_party_handler, []},
             {<<"/api/v1/parties/:party_id/suspend">>, cb_party_suspend_handler, []},
+            {<<"/api/v1/parties/:party_id/reactivate">>, cb_party_reactivate_handler, []},
             {<<"/api/v1/parties/:party_id/close">>, cb_party_close_handler, []},
 
             %% Accounts
-            {<<"/api/v1/accounts">>, cb_accounts_handler, []},
+            {<<"/api/v1/accounts">>, cb_accounts_list_handler, []},
+            {<<"/api/v1/stats">>, cb_stats_handler, []},
             {<<"/api/v1/accounts/:account_id">>, cb_account_handler, []},
+            {<<"/api/v1/accounts/:account_id/transactions">>, cb_account_transactions_handler, []},
             {<<"/api/v1/accounts/:account_id/balance">>, cb_account_balance_handler, []},
             {<<"/api/v1/accounts/:account_id/freeze">>, cb_account_freeze_handler, []},
             {<<"/api/v1/accounts/:account_id/unfreeze">>, cb_account_unfreeze_handler, []},
@@ -29,12 +32,29 @@ dispatch() ->
             {<<"/api/v1/transactions/transfer">>, cb_transaction_transfer_handler, []},
             {<<"/api/v1/transactions/deposit">>, cb_transaction_deposit_handler, []},
             {<<"/api/v1/transactions/withdraw">>, cb_transaction_withdraw_handler, []},
+            {<<"/api/v1/transactions/adjustment">>, cb_transaction_adjustment_handler, []},
             {<<"/api/v1/transactions/:txn_id">>, cb_transaction_handler, []},
             {<<"/api/v1/transactions/:txn_id/reverse">>, cb_transaction_reverse_handler, []},
 
             %% Ledger entries
             {<<"/api/v1/transactions/:txn_id/entries">>, cb_transaction_entries_handler, []},
             {<<"/api/v1/accounts/:account_id/entries">>, cb_account_entries_handler, []},
+
+            %% Savings Products
+            {<<"/api/v1/savings-products">>, cb_savings_products_list_handler, []},
+            {<<"/api/v1/savings-products/:product_id">>, cb_savings_products_handler, []},
+
+            %% Loan Products
+            {<<"/api/v1/loan-products">>, cb_loan_products_handler, []},
+            {<<"/api/v1/loan-products/:product_id">>, cb_loan_products_handler, []},
+
+            %% Loans
+            {<<"/api/v1/loans">>, cb_loans_handler, []},
+            {<<"/api/v1/loans/:loan_id">>, cb_loans_handler, []},
+            {<<"/api/v1/loans/:loan_id/approve">>, cb_loans_handler, []},
+            {<<"/api/v1/loans/:loan_id/disburse">>, cb_loans_handler, []},
+            {<<"/api/v1/loans/:loan_id/repayments">>, cb_loan_repayments_handler, []},
+            {<<"/api/v1/loans/:loan_id/repay">>, cb_loan_repayments_handler, []},
 
             %% 404 fallback
             {'_', cb_not_found_handler, []}

@@ -7,6 +7,7 @@
     get_party/1,
     list_parties/2,
     suspend_party/1,
+    reactivate_party/1,
     close_party/1
 ]).
 
@@ -89,6 +90,32 @@ suspend_party(PartyId) ->
                         {ok, Updated};
                     suspended ->
                         {error, party_already_suspended};
+                    closed ->
+                        {error, party_closed}
+                end;
+            [] ->
+                {error, party_not_found}
+        end
+    end,
+    case mnesia:transaction(F) of
+        {atomic, Result} -> Result;
+        {aborted, _Reason} -> {error, database_error}
+    end.
+
+%% @doc Reactivate a suspended party.
+-spec reactivate_party(uuid()) -> {ok, #party{}} | {error, atom()}.
+reactivate_party(PartyId) ->
+    F = fun() ->
+        case mnesia:read(party, PartyId, write) of
+            [Party] ->
+                case Party#party.status of
+                    suspended ->
+                        Now = erlang:system_time(millisecond),
+                        Updated = Party#party{status = active, updated_at = Now},
+                        mnesia:write(Updated),
+                        {ok, Updated};
+                    active ->
+                        {error, party_not_suspended};
                     closed ->
                         {error, party_closed}
                 end;

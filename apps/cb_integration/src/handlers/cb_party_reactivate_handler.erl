@@ -1,4 +1,4 @@
--module(cb_account_unfreeze_handler).
+-module(cb_party_reactivate_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").
 
@@ -7,13 +7,13 @@
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req, State) ->
     Method = cowboy_req:method(Req),
-    AccountId = cowboy_req:binding(<<"account_id">>, Req),
-    handle(Method, AccountId, Req, State).
+    PartyId = cowboy_req:binding(party_id, Req),
+    handle(Method, PartyId, Req, State).
 
-handle(<<"POST">>, AccountId, Req, State) ->
-    case cb_accounts:unfreeze_account(AccountId) of
-        {ok, Account} ->
-            Resp = account_to_json(Account),
+handle(<<"POST">>, PartyId, Req, State) ->
+    case cb_party:reactivate_party(PartyId) of
+        {ok, Party} ->
+            Resp = party_to_json(Party),
             Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
             Req2 = cowboy_req:reply(200, Headers, jsone:encode(Resp), Req),
             {ok, Req2, State};
@@ -25,23 +25,21 @@ handle(<<"POST">>, AccountId, Req, State) ->
             {ok, Req2, State}
     end;
 
-handle(<<"OPTIONS">>, _AccountId, Req, State) ->
+handle(<<"OPTIONS">>, _PartyId, Req, State) ->
     Req2 = cb_cors:reply_preflight(Req),
     {ok, Req2, State};
 
-handle(_, _AccountId, Req, State) ->
+handle(_, _PartyId, Req, State) ->
     Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
     Req2 = cowboy_req:reply(405, Headers, <<"{\"error\": \"method_not_allowed\"}">>, Req),
     {ok, Req2, State}.
 
-account_to_json(Account) ->
+party_to_json(Party) ->
     #{
-        account_id => Account#account.account_id,
-        party_id => Account#account.party_id,
-        name => Account#account.name,
-        currency => Account#account.currency,
-        balance => Account#account.balance,
-        status => Account#account.status,
-        created_at => Account#account.created_at,
-        updated_at => Account#account.updated_at
+        party_id => Party#party.party_id,
+        full_name => Party#party.full_name,
+        email => Party#party.email,
+        status => Party#party.status,
+        created_at => Party#party.created_at,
+        updated_at => Party#party.updated_at
     }.

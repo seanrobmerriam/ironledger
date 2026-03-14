@@ -1,4 +1,4 @@
--module(cb_accounts_handler).
+-module(cb_accounts_list_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").
 
@@ -33,7 +33,6 @@ handle(<<"GET">>, Req, State) ->
     end;
 
 handle(<<"POST">>, Req, State) ->
-    %% Create account
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     case jsone:try_decode(Body) of
         {ok, #{<<"party_id">> := PartyId, <<"currency">> := CurrencyBin, <<"name">> := Name}, _} ->

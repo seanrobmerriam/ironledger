@@ -1,0 +1,19 @@
+{application, cb_loans,
+ [
+  {description, "IronLedger Loan Management"},
+  {vsn, "0.1.0"},
+  {registered, [cb_loans_sup]},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  mnesia,
+                  cb_ledger,
+                  cb_accounts,
+                  cb_party
+                 ]},
+  {env, []},
+  {modules, []},
+  {mod, {cb_loans_app, []}},
+  {licenses, ["Apache-2.0"]},
+  {links, []}
+ ]}.
