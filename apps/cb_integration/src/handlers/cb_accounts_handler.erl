@@ -1,3 +1,46 @@
+%% @doc Accounts List Handler
+%%
+%% Handler for the `/api/v1/accounts` endpoint which provides account management.
+%%
+%% <h2>REST API Endpoints</h2>
+%%
+%% <ul>
+%%   <li><b>GET /api/v1/accounts</b> - List all accounts with pagination</li>
+%%   <li><b>POST /api/v1/accounts</b> - Create a new account</li>
+%%   <li><b>OPTIONS /api/v1/accounts</b> - CORS preflight</li>
+%% </ul>
+%%
+%% <h2>GET - List Accounts</h2>
+%%
+%% Returns a paginated list of accounts. Supports query parameters:
+%% <ul>
+%%   <li><code>page</code> - Page number (default: 1)</li>
+%%   <li><code>page_size</code> - Items per page (default: 20)</li>
+%% </ul>
+%%
+%% Response format:
+%% <pre>
+%% {
+%%   "items": [...],
+%%   "total": 100,
+%%   "page": 1,
+%%   "page_size": 20
+%% }
+%% </pre>
+%%
+%% <h2>POST - Create Account</h2>
+%%
+%% Creates a new bank account. Required fields:
+%% <ul>
+%%   <li><code>party_id</code> - UUID of the owner party</li>
+%%   <li><code>currency</code> - ISO 4217 currency code (e.g., "USD")</li>
+%%   <li><code>name</code> - Account name</li>
+%% </ul>
+%%
+%% On success, returns 201 Created with the new account details.
+%%
+%% @see cb_accounts
+%% @see cb_account_handler
 -module(cb_accounts_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").

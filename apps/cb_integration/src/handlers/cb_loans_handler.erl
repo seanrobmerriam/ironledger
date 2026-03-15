@@ -1,3 +1,51 @@
+%% @doc Loans Handler
+%%
+%% Handler for the `/api/v1/loans` and `/api/v1/loans/:loan_id` endpoints.
+%% This is a comprehensive handler that manages the complete loan lifecycle.
+%%
+%% <h2>Loan Lifecycle</h2>
+%%
+%% <ol>
+%%   <li><b>Created</b> - Loan application submitted with product, principal, term</li>
+%%   <li><b>Approved</b> - Loan approved by system or manually</li>
+%%   <li><b>Disbursed</b> - Funds transferred to borrower account</li>
+%%   <li><b>Repaying</b> - Borrower makes regular payments</li>
+%%   <li><b>Paid Off</b> - All payments complete</li>
+%% </ol>
+%%
+%% <h2>REST API Endpoints</h2>
+%%
+%% <ul>
+%%   <li><b>POST /api/v1/loans</b> - Create a new loan application</li>
+%%   <li><b>GET /api/v1/loans</b> - List loans for a party</li>
+%%   <li><b>GET /api/v1/loans/:loan_id</b> - Get loan details</li>
+%%   <li><b>POST /api/v1/loans/:loan_id/approve</b> - Approve a loan</li>
+%%   <li><b>POST /api/v1/loans/:loan_id/disburse</b> - Disburse loan funds</li>
+%% </ul>
+%%
+%% <h2>Creating a Loan (POST /api/v1/loans)</h2>
+%%
+%% Required fields:
+%% <ul>
+%%   <li><code>party_id</code> - UUID of the borrowing party</li>
+%%   <li><code>product_id</code> - UUID of the loan product</li>
+%%   <li><code>account_id</code> - Destination account for disbursement</li>
+%%   <li><code>principal</code> - Loan amount in minor units</li>
+%%   <li><code>term_months</code> - Loan term in months</li>
+%% </ul>
+%%
+%% <h2>Loan States</h2>
+%%
+%% <ul>
+%%   <li><code>pending</code> - Awaiting approval</li>
+%%   <li><code>approved</code> - Approved, awaiting disbursement</li>
+%%   <li><code>active</code> - Disbursed and being repaid</li>
+%%   <li><code>paid_off</code> - Fully repaid</li>
+%%   <li><code>defaulted</code> - Payment failure</li>
+%% </ul>
+%%
+%% @see cb_loan_accounts
+%% @see cb_loan_products
 -module(cb_loans_handler).
 
 -include_lib("cb_loans/include/loan.hrl").
@@ -108,7 +156,8 @@ create_loan(Req, State) ->
     end.
 
 list_loans(Req, State) ->
-    PartyId = cowboy_req:qs_val(<<"party_id">>, Req),
+    Qs = cowboy_req:parse_qs(Req),
+    PartyId = proplists:get_value(<<"party_id">>, Qs),
     case PartyId of
         undefined ->
             {Status, ErrorAtom, Message} = cb_http_errors:to_response(missing_required_field),

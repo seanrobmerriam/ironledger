@@ -1,8 +1,71 @@
+%% @doc Cowboy Router Configuration for IronLedger HTTP API
+%%
+%% This module defines the routing table for the Cowboy HTTP server. Cowboy routing
+%% matches incoming HTTP requests to handler modules based on the request path and
+%% HTTP method.
+%%
+%% <h2>How Cowboy Routing Works</h2>
+%%
+%% Cowboy uses a dispatch list containing host and route specifications. Each route
+%% consists of:
+%%
+%% <ul>
+%%   <li>A path pattern (e.g., <<"/api/v1/parties">>)</li>
+%%   <li>A handler module (e.g., cb_parties_handler)</li>
+%%   <li>Handler-specific state (typically an empty list)</li>
+%% </ul>
+%%
+%% Path patterns can contain binding variables using the colon syntax (e.g., 
+%% <<":party_id">>) which capture parts of the URL. These bindings are accessible
+%% in the handler via cowboy_req:binding/2.
+%%
+%% <h2>REST API Structure</h2>
+%%
+%% The IronLedger API follows RESTful conventions:
+%%
+%% <ul>
+%%   <li><b>GET</b> - Retrieve resources (list or single)</li>
+%%   <li><b>POST</b> - Create new resources</li>
+%%   <li><b>PUT/PATCH</b> - Update existing resources</li>
+%%   <li><b>DELETE</b> - Remove resources</li>
+%%   <li><b>OPTIONS</b> - CORS preflight requests</li>
+%% </ul>
+%%
+%% <h2>API Versioning</h2>
+%%
+%% The API is versioned under the path prefix `/api/v1/`. This allows for future
+%% backward-compatible changes while maintaining support for older clients.
+%%
+%% <h2>Routing Order</h2>
+%%
+%% Routes are matched in order from top to bottom. The last route uses the 
+%% wildcard pattern `' _'` to catch all unmatched requests and route them to
+%% cb_not_found_handler.
+%%
+%% @see cowboy_router
+%% @see cowboy
 -module(cb_router).
 
 -export([dispatch/0]).
 
-%% @doc Create Cowboy dispatch rules.
+%% @doc Compile the Cowboy dispatch rules.
+%%
+%% This function builds and compiles the dispatch list for Cowboy. It maps all
+%% API endpoints to their corresponding handler modules. The dispatch rules are
+%% passed to Cowboy when starting the HTTP server.
+%%
+%% Routes are organized by functional area:
+%% <ul>
+%%   <li>Health checks - `/health`</li>
+%%   <li>Parties - Customer/party management</li>
+%%   <li>Accounts - Bank account operations</li>
+%%   <li>Transactions - Transfers, deposits, withdrawals</li>
+%%   <li>Ledger entries - Journal entries</li>
+%%   <li>Products - Savings and loan products</li>
+%%   <li>Loans - Loan management</li>
+%% </ul>
+%%
+%% @returns Compiled dispatch rules for Cowboy
 -spec dispatch() -> cowboy_router:dispatch_rules().
 dispatch() ->
     cowboy_router:compile([

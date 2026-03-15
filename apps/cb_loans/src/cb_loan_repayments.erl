@@ -1,3 +1,41 @@
+%%%===================================================================
+%%%
+%%% @doc Loan Repayment Management Module
+%%%
+%%% This module manages loan repayment tracking, including scheduled
+%%% payments, payment status, overdue calculations, and penalties.
+%%%
+%%% <h2>Repayment Tracking</h2>
+%%%
+%%% Each loan generates multiple repayment records representing
+%%% scheduled installment payments. The system tracks:
+%%%
+%%% <ul>
+%%%   <li><b>Due Date</b>: When the payment is scheduled</li>
+%%%   <li><b>Payment Amount</b>: Total amount due</li>
+%%%   <li><b>Principal/Interest Breakdown</b>: How payment is applied</li>
+%%%   <li><b>Status</b>: Pending, paid, late, or defaulted</li>
+%%%   <li><b>Penalties</b>: Late payment charges</li>
+%%% </ul>
+%%%
+%%% <h2>Payment Status</h2>
+%%%
+%%% <ol>
+%%%   <li><b>pending</b>: Payment due but not yet received</li>
+%%%   <li><b>paid</b>: Payment successfully received</li>
+%%%   <li><b>late</b>: Payment received after due date</li>
+%%%   <li><b>defaulted</b>: Payment significantly overdue</li>
+%%% </ol>
+%%%
+%%% <h2>Late Penalties</h2>
+%%%
+%%% A grace period (5 days) is provided after the due date before
+%%%.late penalties are applied. Penalty rates are specified in
+%%%.basis points (BPS).
+%%%
+%%% @end
+%%%===================================================================
+
 -module(cb_loan_repayments).
 -behaviour(gen_server).
 
@@ -12,6 +50,9 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+%% Suppress Dialyzer warnings for mnesia select with pattern matching
+-dialyzer({nowarn_function, do_get_repayments/1}).
+
 -include("loan.hrl").
 -include_lib("cb_ledger/include/cb_ledger.hrl").
 
@@ -23,27 +64,83 @@
 -define(GRACE_PERIOD_DAYS, 5).
 -define(LATE_PENALTY_BPS, 500).
 
+%%
+%% @doc Starts the loan repayments gen_server.
+%%
+%% Initializes the Mnesia table for repayment record storage
+%% and links the process to the supervision tree.
+%%
+%% @returns {ok, pid()} on success, {error, term()} on failure
+%%
 -spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+%%
+%% @doc Records a new loan repayment.
+%%
+%% Creates a repayment record for a specific loan, calculating
+%% the interest portion and any applicable penalties.
+%%
+%% @param LoanId The loan identifier
+%% @param Amount Total payment amount
+%% @param DueDate Scheduled due date (timestamp)
+%% @param PrincipalPortion Portion going to principal
+%%
+%% @returns {ok, repayment_id()} on success, {error, term()} on failure
+%%
 -spec record_repayment(loan_id(), amount(), integer(), amount()) ->
     {ok, repayment_id()} | {error, term()}.
 record_repayment(LoanId, Amount, DueDate, PrincipalPortion) ->
     gen_server:call(?SERVER, {record_repayment, LoanId, Amount, DueDate, PrincipalPortion}).
 
+%%
+%% @doc Retrieves all repayment records for a loan.
+%%
+%% @param LoanId The loan identifier
+%%
+%% @returns List of loan_repayment() records for this loan
+%%
 -spec get_repayments(loan_id()) -> [loan_repayment()].
 get_repayments(LoanId) ->
     gen_server:call(?SERVER, {get_repayments, LoanId}).
 
+%%
+%% @doc Calculates the total overdue amount for a loan.
+%%
+%% Sums up all pending payments that are past the due date
+%% plus any applicable late penalties.
+%%
+%% @param LoanId The loan identifier
+%%
+%% @returns {ok, amount()} Total overdue amount, or {error, term()} on failure
+%%
 -spec calculate_overdue(loan_id()) -> {ok, amount()} | {error, term()}.
 calculate_overdue(LoanId) ->
     gen_server:call(?SERVER, {calculate_overdue, LoanId}).
 
+%%
+%% @doc Retrieves a specific repayment record.
+%%
+%% @param RepaymentId The repayment identifier
+%%
+%% @returns {ok, loan_repayment()} if found, {error, not_found} if not found
+%%
 -spec get_repayment(repayment_id()) -> {ok, loan_repayment()} | {error, not_found}.
 get_repayment(RepaymentId) ->
     gen_server:call(?SERVER, {get_repayment, RepaymentId}).
 
+%%
+%% @doc Updates the status of a repayment record.
+%%
+%% Changes the payment status. Valid statuses are: pending, paid,
+%% late, and defaulted.
+%%
+%% @param RepaymentId The repayment identifier
+%% @param Status New status atom
+%%
+%% @returns {ok, loan_repayment()} on success, {error, term()} on failure
+%%
 -spec update_repayment_status(repayment_id(), atom()) -> {ok, loan_repayment()} | {error, term()}.
 update_repayment_status(RepaymentId, Status) ->
     gen_server:call(?SERVER, {update_repayment_status, RepaymentId, Status}).

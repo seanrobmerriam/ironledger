@@ -1,3 +1,52 @@
+%%%
+%%% @doc Savings Products Management Module.
+%%%
+%%% This module provides the core API for managing savings products in the
+%%% IronLedger core banking system.
+%%%
+%%% ## Overview
+%%%
+%%% Savings products define the terms and conditions for interest-bearing
+%%% deposit accounts. Banks offer various savings products to meet different
+%%% customer needs - from basic savings accounts to high-yield savings accounts.
+%%%
+%%% This module allows:
+%%% <ul>
+%%%   <li>Creating new savings product definitions</li>
+%%%   <li>Retrieving product details</li>
+%%%   <li>Listing all available products</li>
+%%%   <li>Activating/deactivating products</li>
+%%% </ul>
+%%%
+%%% ## Usage Example
+%%%
+%%% <pre>
+%%% % Create a high-yield savings product
+%%% {ok, Product} = cb_savings_products:create_product(
+%%%     <<"High-Yield Savings">>,
+%%%     <<"4.5% APY, daily compounding, $100 minimum balance">>,
+%%%     'USD',
+%%%     0.045,
+%%%     compound,
+%%%     daily,
+%%%     10000
+%%% ).
+%%%
+%%% % List all active products
+%%% {ok, Products} = cb_savings_products:list_products().
+%%%
+%%% % Deactivate a product (e.g., promotional product ended)
+%%% {ok, Updated} = cb_savings_products:deactivate_product(ProductId).
+%%% </pre>
+%%%
+%%% ## Data Storage
+%%%
+%%% All savings products are stored in the Mnesia table `savings_product`.
+%%% All operations are transactional to ensure consistency.
+%%%
+%%% @see savings_product.hrl
+%%% @see cb_interest
+
 -module(cb_savings_products).
 
 -include("savings_product.hrl").
@@ -10,17 +59,48 @@
     deactivate_product/1
 ]).
 
--type product_id() :: binary().
-
+%%%
+%%% @doc Creates a new savings product with the specified parameters.
+%%%
+%%% Creates and persists a new savings product definition. The product
+%%% is created with `active` status, making it immediately available
+%%% for opening new savings accounts.
+%%%
+%%% @param Name Human-readable name for the product
+%%% @param Description Detailed description of product terms
+%%% @param Currency ISO 4217 currency code (atom)
+%%% @param InterestRate Annual interest rate as decimal (e.g., 0.05 = 5%)
+%%% @param InterestType Type of interest calculation: `simple` or `compound`
+%%% @param CompoundingPeriod How often interest compounds: `daily`, `monthly`, `quarterly`, `annually`
+%%% @param MinimumBalance Minimum balance in minor units to earn interest
+%%%
+%%% @returns `{ok, SavingsProduct}' on success
+%%% @returns `{error, unsupported_currency}' if currency not supported
+%%% @returns `{error, invalid_interest_type}' if interest type is invalid
+%%% @returns `{error, invalid_compounding_period}' if compounding period is invalid
+%%% @returns `{error, invalid_parameters}' if any parameter fails validation
+%%% @returns `{error, database_error}' if Mnesia transaction fails
+%%%
+%%% @example
+%%% {ok, Product} = cb_savings_products:create_product(
+%%%     <<"Basic Savings">>,
+%%%     <<"Simple savings account with competitive rates">>,
+%%%     'USD',
+%%%     0.001,
+%%%     simple,
+%%%     monthly,
+%%%     0
+%%% ).
+%%%
 -spec create_product(
-    binary(),
-    binary(),
-    atom(),
-    float(),
-    atom(),
-    atom(),
-    integer()
-) -> {ok, #savings_product{}} | {error, atom()}.
+    Name        :: binary(),
+    Description :: binary(),
+    Currency    :: atom(),
+    InterestRate :: float(),
+    InterestType :: atom(),
+    CompoundingPeriod :: atom(),
+    MinimumBalance :: integer()
+) -> {ok, savings_product()} | {error, atom()}.
 create_product(Name, Description, Currency, InterestRate, InterestType, CompoundingPeriod, MinimumBalance) 
         when is_binary(Name), is_binary(Description), is_integer(MinimumBalance), MinimumBalance >= 0 ->
     case lists:member(Currency, ?VALID_CURRENCIES) of
@@ -64,7 +144,24 @@ create_product(Name, Description, Currency, InterestRate, InterestType, Compound
 create_product(_, _, _, _, _, _, _) ->
     {error, invalid_parameters}.
 
--spec get_product(product_id()) -> {ok, #savings_product{}} | {error, atom()}.
+%%%
+%%% @doc Retrieves a savings product by its unique identifier.
+%%%
+%%% Looks up a savings product in the database by its product ID.
+%%% Returns the complete product record including all configuration details.
+%%%
+%%% @param ProductId Unique UUID of the savings product
+%%%
+%%% @returns `{ok, SavingsProduct}' if product exists
+%%% @returns `{error, product_not_found}' if no product with given ID exists
+%%% @returns `{error, invalid_product_id}' if ProductId is not a binary
+%%% @returns `{error, database_error}' if Mnesia transaction fails
+%%%
+%%% @example
+%%% {ok, Product} = cb_savings_products:get_product(ProductId),
+%%% io:format("Product: ~p~n", [Product#savings_product.name]).
+%%%
+-spec get_product(ProductId :: product_id()) -> {ok, savings_product()} | {error, atom()}.
 get_product(ProductId) when is_binary(ProductId) ->
     F = fun() ->
         case mnesia:read(savings_product, ProductId) of
@@ -79,7 +176,21 @@ get_product(ProductId) when is_binary(ProductId) ->
 get_product(_) ->
     {error, invalid_product_id}.
 
--spec list_products() -> {ok, [#savings_product{}]} | {error, atom()}.
+%%%
+%%% @doc Lists all savings products in the system.
+%%%
+%%% Retrieves all savings product definitions, sorted by creation date
+%%% (newest first). Returns all products regardless of status - both
+%%% active and inactive products are included.
+%%%
+%%% @returns `{ok, [SavingsProduct]}' containing all products sorted by creation date
+%%% @returns `{error, database_error}' if Mnesia transaction fails
+%%%
+%%% @example
+%%% {ok, Products} = cb_savings_products:list_products(),
+%%% ActiveProducts = [P || P <- Products, P#savings_product.status =:= active].
+%%%
+-spec list_products() -> {ok, [savings_product()]} | {error, atom()}.
 list_products() ->
     F = fun() ->
         AllProducts = mnesia:select(savings_product, [{'_', [], ['$_']}]),
@@ -94,7 +205,32 @@ list_products() ->
         {aborted, _Reason} -> {error, database_error}
     end.
 
--spec activate_product(product_id()) -> {ok, #savings_product{}} | {error, atom()}.
+%%%
+%%% @doc Activates a previously inactive savings product.
+%%%
+%%% Changes the status of a savings product from `inactive` to `active`.
+%%% Once activated, new savings accounts can be opened under this product.
+%%%
+%%% This operation is useful for:
+%%% <ul>
+%%%   <li>Reactivating a promotional product</li>
+%%%   <li>Enabling a product that was temporarily suspended</li>
+%%%   <li>Launching a new product in phases</li>
+%%% </ul>
+%%%
+%%% @param ProductId Unique UUID of the savings product to activate
+%%%
+%%% @returns `{ok, UpdatedProduct}' with updated status if successful
+%%% @returns `{error, product_not_found}' if product doesn't exist
+%%% @returns `{error, product_already_active}' if product is already active
+%%% @returns `{error, invalid_product_id}' if ProductId is not a binary
+%%% @returns `{error, database_error}' if Mnesia transaction fails
+%%%
+%%% @example
+%%% {ok, Updated} = cb_savings_products:activate_product(ProductId),
+%%% true = Updated#savings_product.status =:= active.
+%%%
+-spec activate_product(ProductId :: product_id()) -> {ok, savings_product()} | {error, atom()}.
 activate_product(ProductId) when is_binary(ProductId) ->
     F = fun() ->
         case mnesia:read(savings_product, ProductId, write) of
@@ -119,7 +255,38 @@ activate_product(ProductId) when is_binary(ProductId) ->
 activate_product(_) ->
     {error, invalid_product_id}.
 
--spec deactivate_product(product_id()) -> {ok, #savings_product{}} | {error, atom()}.
+%%%
+%%% @doc Deactivates an active savings product.
+%%%
+%%% Changes the status of a savings product from `active` to `inactive`.
+%%% Once deactivated, no new savings accounts can be opened under this product.
+%%% Existing accounts continue to function normally and earn interest.
+%%%
+%%% This operation is useful for:
+%%% <ul>
+%%%   <li>Ending a promotional product offer</li>
+%%%   <li>Phasing out an obsolete product</li>
+%%%   <li>Temporarily suspending new account openings</li>
+%%% </ul>
+%%%
+%%% Note: Deactivating a product does NOT affect existing savings accounts
+%%% opened under that product. They remain active and continue to earn
+%%% interest according to the product terms.
+%%%
+%%% @param ProductId Unique UUID of the savings product to deactivate
+%%%
+%%% @returns `{ok, UpdatedProduct}' with updated status if successful
+%%% @returns `{error, product_not_found}' if product doesn't exist
+%%% @returns `{error, product_already_inactive}' if product is already inactive
+%%% @returns `{error, invalid_product_id}' if ProductId is not a binary
+%%% @returns `{error, database_error}' if Mnesia transaction fails
+%%%
+%%% @example
+%%% % End a promotional high-yield product
+%%% {ok, Updated} = cb_savings_products:deactivate_product(PromotionalProductId),
+%%% true = Updated#savings_product.status =:= inactive.
+%%%
+-spec deactivate_product(ProductId :: product_id()) -> {ok, savings_product()} | {error, atom()}.
 deactivate_product(ProductId) when is_binary(ProductId) ->
     F = fun() ->
         case mnesia:read(savings_product, ProductId, write) of

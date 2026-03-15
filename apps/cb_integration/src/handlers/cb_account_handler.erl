@@ -1,3 +1,33 @@
+%% @doc Single Account Handler
+%%
+%% Handler for the `/api/v1/accounts/:account_id` endpoint for individual account operations.
+%%
+%% <h2>REST API Endpoints</h2>
+%%
+%% <ul>
+%%   <li><b>GET /api/v1/accounts/:account_id</b> - Get account details</li>
+%%   <li><b>OPTIONS /api/v1/accounts/:account_id</b> - CORS preflight</li>
+%% </ul>
+%%
+%% <h2>GET - Get Account</h2>
+%%
+%% Retrieves detailed information about a specific account by its ID.
+%% The account_id is extracted from the URL path binding.
+%%
+%% Response includes:
+%% <ul>
+%%   <li>account_id - Unique identifier</li>
+%%   <li>party_id - Owner party UUID</li>
+%%   <li>name - Account name</li>
+%%   <li>currency - ISO 4217 currency code</li>
+%%   <li>balance - Current balance in minor units</li>
+%%   <li>status - Account status (active, frozen, closed)</li>
+%%   <li>created_at - Creation timestamp</li>
+%%   <li>updated_at - Last modification timestamp</li>
+%% </ul>
+%%
+%% @see cb_accounts
+%% @see cb_accounts_handler
 -module(cb_account_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").

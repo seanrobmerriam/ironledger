@@ -1,3 +1,27 @@
+%%%
+%%% @doc Interest accrual tracking for IronLedger core banking system.
+%%%
+%%% This module manages the lifecycle of interest accruals. Interest accrual is the
+%%% process of accumulating interest over time before it is actually paid or charged.
+%%%
+%%% == Banking Domain Concepts ==
+%%%
+%%% <b>Accrual Accounting</b>: In banking, interest is typically accrued daily but
+%%% posted monthly. This follows the accrual accounting principle where revenue/expenses
+%%% are recognized when earned/incurred, not when cash changes hands.
+%%%
+%%% <b>Accrued Interest</b>: The cumulative interest that has been earned (for savings)
+%%% or charged (for loans) since the last interest posting. This represents a liability
+%%% for the bank (savings) or an asset (loans).
+%%%
+%%% <b>Daily Accrual</b>: Most modern core banking systems calculate interest accruals
+%%% daily. This provides:
+%%% <ul>
+%%% <li>Accurate tracking of interest for partial periods</li>
+%%% <li>Fair treatment of accounts that open/close mid-period</li>
+%%% <li>Real-time visibility into interest income/expense</li>
+%%% </ul>
+%%%
 -module(cb_interest_accrual).
 
 -include("cb_interest.hrl").
@@ -12,8 +36,31 @@
     get_accruals_for_account/1
 ]).
 
+-dialyzer({nowarn_function, get_active_accruals/0}).
+-dialyzer({nowarn_function, get_accruals_for_account/1}).
+
 -define(ACCRUAL_TABLE, interest_accrual).
 
+%%%
+%%% @doc Start a new interest accrual for an account.
+%%%
+%%% Creates a new accrual record when interest-bearing activity begins on an account.
+%%% This typically happens when:
+%%% <ul>
+%%% <li>A savings account is opened</li>
+%%% <li>A loan is disbursed</li>
+%%% <li>A new interest-bearing product is activated</li>
+%%% </ul>
+%%%
+%%% The accrual is created with zero accrued amount and status 'accruing'.
+%%% Daily interest will be accumulated until the accrual is closed or posted.
+%%%
+%%% @param AccountId The UUID of the account to start accruing interest for
+%%% @param ProductId The UUID of the interest-bearing product
+%%% @param Balance The initial balance in minor units
+%%% @param AnnualRate The annual interest rate as a decimal (e.g., 0.05 for 5%)
+%%% @returns {ok, InterestAccrual} on success, {error, Reason} on failure
+%%%
 -spec start_accrual(uuid(), uuid(), amount(), interest_rate()) -> {ok, interest_accrual()} | {error, atom()}.
 start_accrual(AccountId, ProductId, Balance, AnnualRate) when is_binary(AccountId), is_binary(ProductId), is_integer(Balance), Balance >= 0, is_float(AnnualRate), AnnualRate >= 0 ->
     F = fun() ->
@@ -51,6 +98,24 @@ start_accrual(AccountId, ProductId, Balance, AnnualRate) when is_binary(AccountI
         {aborted, _Reason} -> {error, database_error}
     end.
 
+%%%
+%%% @doc Calculate the daily interest accrual for an account.
+%%%
+%%% This function calculates how much interest has accrued for a specific account
+%%% based on its current balance and the daily interest rate. It reads the existing
+%%% accrual record (if any) and calculates the new accrued amount.
+%%%
+%%% For accounts with status 'accruing', the daily interest is calculated as:
+%%% <pre>
+%%%   Daily Interest = Balance × Daily Rate
+%%% </pre>
+%%%
+%%% The returned amount is added to the existing accrued amount in the record.
+%%%
+%%% @param AccountId The UUID of the account
+%%% @param Balance The current account balance in minor units
+%%% @returns The daily accrued interest amount in minor units
+%%%
 -spec calculate_daily_accrual(uuid(), amount()) -> amount().
 calculate_daily_accrual(AccountId, Balance) when is_binary(AccountId), is_integer(Balance), Balance >= 0 ->
     F = fun() ->
@@ -71,6 +136,12 @@ calculate_daily_accrual(AccountId, Balance) when is_binary(AccountId), is_intege
     {atomic, Result} = mnesia:transaction(F),
     Result.
 
+%%%
+%%% @doc Retrieve an interest accrual record by its ID.
+%%%
+%%% @param AccrualId The UUID of the accrual record to retrieve
+%%% @returns {ok, InterestAccrual} if found, {error, accrual_not_found} if not found
+%%%
 -spec get_accrual(uuid()) -> {ok, interest_accrual()} | {error, atom()}.
 get_accrual(AccrualId) ->
     F = fun() ->
@@ -84,6 +155,22 @@ get_accrual(AccrualId) ->
         {aborted, _Reason} -> {error, database_error}
     end.
 
+%%%
+%%% @doc Close an interest accrual record.
+%%%
+%%% Closes an active accrual when interest-bearing activity ends. This happens when:
+%%% <ul>
+%%% <li>An account is closed</li>
+%%% <li>The account switches to a non-interest-bearing product</li>
+%%% <li>The interest-bearing term ends (e.g., CD matures)</li>
+%%% </ul>
+%%%
+%%% Closing sets the end_date to the current timestamp and changes status to 'closed'.
+%%% The accrued interest remains in the record for reporting purposes.
+%%%
+%%% @param AccrualId The UUID of the accrual to close
+%%% @returns {ok, UpdatedAccrual} on success, {error, Reason} on failure
+%%%
 -spec close_accrual(uuid()) -> {ok, interest_accrual()} | {error, atom()}.
 close_accrual(AccrualId) ->
     F = fun() ->
@@ -105,6 +192,15 @@ close_accrual(AccrualId) ->
         {aborted, _Reason} -> {error, database_error}
     end.
 
+%%%
+%%% @doc Get all active (accruing) interest accruals in the system.
+%%%
+%%% This function is used for batch processing of daily interest calculations.
+%%% It returns all accruals with status 'accruing', which represent accounts
+%%% that are actively accumulating interest.
+%%%
+%%% @returns List of all active interest accrual records
+%%%
 -spec get_active_accruals() -> [interest_accrual()].
 get_active_accruals() ->
     F = fun() ->
@@ -114,6 +210,20 @@ get_active_accruals() ->
     {atomic, Accruals} = mnesia:transaction(F),
     Accruals.
 
+%%%
+%%% @doc Get all interest accruals for a specific account.
+%%%
+%%% Returns all accrual records associated with an account, including active,
+%%% posted, and closed accruals. This is useful for:
+%%% <ul>
+%%% <li>Account interest history reporting</li>
+%%% <li>Auditing past accruals</li>
+%%% <li>Handling account transitions between products</li>
+%%% </ul>
+%%%
+%%% @param AccountId The UUID of the account
+%%% @returns List of all accrual records for the account
+%%%
 -spec get_accruals_for_account(binary()) -> [interest_accrual()].
 get_accruals_for_account(AccountId) ->
     F = fun() ->

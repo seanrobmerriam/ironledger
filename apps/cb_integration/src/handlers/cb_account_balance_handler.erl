@@ -1,3 +1,35 @@
+%% @doc Account Balance Handler
+%%
+%% Handler for the `/api/v1/accounts/:account_id/balance` endpoint.
+%%
+%% <h2>Purpose</h2>
+%%
+%% Returns the current balance of a specific account. This is a dedicated endpoint
+%% for balance queries, separate from the main account details endpoint, allowing
+%% for optimized balance lookups without fetching full account data.
+%%
+%% <h2>REST API Endpoints</h2>
+%%
+%% <ul>
+%%   <li><b>GET /api/v1/accounts/:account_id/balance</b> - Get account balance</li>
+%%   <li><b>OPTIONS /api/v1/accounts/:account_id/balance</b> - CORS preflight</li>
+%% </ul>
+%%
+%% <h2>Response Format</h2>
+%%
+%% Returns a JSON object with the balance information:
+%% <pre>
+%% {
+%%   "account_id": "uuid",
+%%   "balance": 100000,
+%%   "available_balance": 100000,
+%%   "currency": "USD"
+%% }
+%% </pre>
+%%
+%% All amounts are in minor units (cents, pence, etc.).
+%%
+%% @see cb_accounts
 -module(cb_account_balance_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").

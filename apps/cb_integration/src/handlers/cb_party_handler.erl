@@ -1,3 +1,31 @@
+%% @doc Single Party (Customer) Handler
+%%
+%% Handler for the `/api/v1/parties/:party_id` endpoint for individual party operations.
+%%
+%% <h2>REST API Endpoints</h2>
+%%
+%% <ul>
+%%   <li><b>GET /api/v1/parties/:party_id</b> - Get party details</li>
+%%   <li><b>OPTIONS /api/v1/parties/:party_id</b> - CORS preflight</li>
+%% </ul>
+%%
+%% <h2>GET - Get Party</h2>
+%%
+%% Retrieves detailed information about a specific party by their ID.
+%% The party_id is extracted from the URL path binding.
+%%
+%% Response includes:
+%% <ul>
+%%   <li>party_id - Unique identifier</li>
+%%   <li>full_name - Party's full legal name</li>
+%%   <li>email - Contact email</li>
+%%   <li>status - Party status (active, suspended, closed)</li>
+%%   <li>created_at - Creation timestamp</li>
+%%   <li>updated_at - Last modification timestamp</li>
+%% </ul>
+%%
+%% @see cb_party
+%% @see cb_parties_handler
 -module(cb_party_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").

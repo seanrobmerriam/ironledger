@@ -1,3 +1,35 @@
+%%%===================================================================
+%%%
+%%% @doc Loan Product Management Module
+%%%
+%%% This module manages loan product definitions in the IronLedger
+%%% core banking system. Loan products are templates that define
+%%% standardized loan offerings.
+%%%
+%%% <h2>Loan Products</h2>
+%%%
+%%% A loan product represents a standardized loan offering with
+%%% predefined terms that customers can apply for. Products include:
+%%%
+%%% <ul>
+%%%   <li><b>Product Type</b>: Personal loan, auto loan, mortgage, etc.</li>
+%%%   <li><b>Amount Range</b>: Minimum and maximum principal amounts</li>
+%%%   <li><b>Term Range</b>: Minimum and maximum loan terms</li>
+%%%   <li><b>Interest Rate</b>: Annual rate and calculation method</li>
+%%%   <li><b>Currency</b>: Supported currencies</li>
+%%% </ul>
+%%%
+%%% <h2>Product Lifecycle</h2>
+%%%
+%%% <ol>
+%%%   <li><b>Create</b>: Define a new loan product template</li>
+%%%   <li><b>Active</b>: Product is available for new applications</li>
+%%%   <li><b>Inactive</b>: Product is archived, no new loans allowed</li>
+%%% </ol>
+%%%
+%%% @end
+%%%===================================================================
+
 -module(cb_loan_products).
 -behaviour(gen_server).
 
@@ -12,6 +44,9 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+%% Suppress Dialyzer warnings for mnesia select with pattern matching
+-dialyzer({nowarn_function, do_list_products/0}).
+
 -include("loan.hrl").
 -include_lib("cb_ledger/include/cb_ledger.hrl").
 
@@ -20,27 +55,90 @@
 
 -record(state, {}).
 
+%%
+%% @doc Starts the loan products gen_server.
+%%
+%% Initializes the Mnesia table for product storage and
+%% links the process to the supervision tree.
+%%
+%% @returns {ok, pid()} on success, {error, term()} on failure
+%%
 -spec start_link() -> {ok, pid()} | {error, term()}.
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+%%
+%% @doc Creates a new loan product definition.
+%%
+%% Defines a new loan product template with specified terms.
+%% The product is created in 'active' status and immediately
+%% available for loan applications.
+%%
+%% @param Name Product name (e.g., "Personal Loan")
+%% @param Description Detailed product description
+%% @param Currency ISO 4217 currency code
+%% @param MinAmount Minimum principal amount
+%% @param MaxAmount Maximum principal amount
+%% @param MinTermMonths Minimum term in months
+%% @param MaxTermMonths Maximum term in months
+%% @param InterestRate Annual interest rate
+%% @param InterestType 'flat' or 'declining'
+%%
+%% @returns {ok, product_id()} on success, {error, term()} on failure
+%%
 -spec create_product(binary(), binary(), atom(), integer(), integer(), integer(), integer(), float(), atom()) ->
     {ok, product_id()} | {error, term()}.
 create_product(Name, Description, Currency, MinAmount, MaxAmount, MinTermMonths, MaxTermMonths, InterestRate, InterestType) ->
     gen_server:call(?SERVER, {create_product, Name, Description, Currency, MinAmount, MaxAmount, MinTermMonths, MaxTermMonths, InterestRate, InterestType}).
 
+%%
+%% @doc Retrieves a loan product by its identifier.
+%%
+%% @param ProductId The unique product identifier
+%%
+%% @returns {ok, loan_product()} if found, {error, not_found} if not found
+%%
 -spec get_product(product_id()) -> {ok, loan_product()} | {error, not_found}.
 get_product(ProductId) ->
     gen_server:call(?SERVER, {get_product, ProductId}).
 
+%%
+%% @doc Lists all active loan products.
+%%
+%% Returns all products that are currently active and available
+%% for new loan applications.
+%%
+%% @returns List of active loan_product() records
+%%
 -spec list_products() -> [loan_product()].
 list_products() ->
     gen_server:call(?SERVER, list_products).
 
+%%
+%% @doc Updates an existing loan product.
+%%
+%% Allows modification of product attributes such as rates,
+%% amounts, and terms. Only active fields can be updated.
+%%
+%% @param ProductId The unique product identifier
+%% @param Updates Map of field names to new values
+%%
+%% @returns {ok, loan_product()} on success, {error, term()} on failure
+%%
 -spec update_product(product_id(), map()) -> {ok, loan_product()} | {error, term()}.
 update_product(ProductId, Updates) ->
     gen_server:call(?SERVER, {update_product, ProductId, Updates}).
 
+%%
+%% @doc Deactivates a loan product.
+%%
+%% Marks the product as inactive, preventing new loan applications
+%% while preserving existing loans for reporting purposes.
+%%
+%% @param ProductId The unique product identifier
+%%
+%% @returns {ok, loan_product()} on success, {error, term()} on failure
+%%
 -spec deactivate_product(product_id()) -> {ok, loan_product()} | {error, term()}.
 deactivate_product(ProductId) ->
     gen_server:call(?SERVER, {deactivate_product, ProductId}).
@@ -119,8 +217,12 @@ do_create_product(Name, Description, Currency, MinAmount, MaxAmount, MinTermMont
                 {atomic, _} -> {ok, ProductId};
                 {aborted, Reason} -> {error, Reason}
             end;
-        {error, _} = Error ->
-            Error
+        {{error, _} = CurrencyError, ok} ->
+            CurrencyError;
+        {ok, {error, _} = InterestError} ->
+            InterestError;
+        {{error, _} = CurrencyError, {error, _}} ->
+            CurrencyError
     end.
 
 do_get_product(ProductId) ->

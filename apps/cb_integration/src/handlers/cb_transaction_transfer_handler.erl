@@ -1,3 +1,55 @@
+%% @doc Transfer Transaction Handler
+%%
+%% Handler for the `/api/v1/transactions/transfer` endpoint for money transfers.
+%%
+%% <h2>What is a Transfer?</h2>
+%%
+%% A transfer moves money from one account to another within the banking system.
+%% It's a fundamental transaction type that:
+%% <ul>
+%%   <li>Debits the source account</li>
+%%   <li>Credits the destination account</li>
+%%   <li>Creates corresponding ledger entries for double-entry bookkeeping</li>
+%% </ul>
+%%
+%% <h2>Idempotency</h2>
+%%
+%% This endpoint supports idempotency via the idempotency_key field. This is critical
+%% for financial transactions where network failures can cause duplicate submissions.
+%% If the same idempotency_key is used for a second request, the original transaction
+%% is returned instead of creating a duplicate.
+%%
+%% <h2>REST API Endpoints</h2>
+%%
+%% <ul>
+%%   <li><b>POST /api/v1/transactions/transfer</b> - Create a transfer</li>
+%%   <li><b>OPTIONS /api/v1/transactions/transfer</b> - CORS preflight</li>
+%% </ul>
+%%
+%% <h2>Request Format</h2>
+%%
+%% <pre>
+%% {
+%%   "idempotency_key": "unique-key-123",
+%%   "source_account_id": "uuid",
+%%   "dest_account_id": "uuid",
+%%   "amount": 10000,
+%%   "currency": "USD",
+%%   "description": "Payment for invoice #123"
+%% }
+%% </pre>
+%%
+%% Required fields:
+%% <ul>
+%%   <li><code>idempotency_key</code> - Unique key for idempotency</li>
+%%   <li><code>source_account_id</code> - Source account UUID</li>
+%%   <li><code>dest_account_id</code> - Destination account UUID</li>
+%%   <li><code>amount</code> - Amount in minor units (e.g., $100.00 = 10000)</li>
+%%   <li><code>currency</code> - ISO 4217 currency code</li>
+%%   <li><code>description</code> - Transaction description</li>
+%% </ul>
+%%
+%% @see cb_payments
 -module(cb_transaction_transfer_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").

@@ -1,3 +1,67 @@
+%%%
+%% @doc CB Payments Module
+%%
+%% This module provides the core payment processing functionality for IronLedger,
+%% a core banking system implementing double-entry bookkeeping.
+%%
+%% ## Payment Types
+%%
+%% The system supports four main types of payment operations:
+%%
+%% <ul>
+%%   <li><b>Transfer</b> - Move funds between two accounts (internal transfer)</li>
+%%   <li><b>Deposit</b> - Add funds to an account (e.g., cash deposit, incoming transfer)</li>
+%%   <li><b>Withdrawal</b> - Remove funds from an account (e.g., cash withdrawal, payment)</li>
+%%   <li><b>Adjustment</b> - Correct account balances (for corrections, fees, interest)</li>
+%% </ul>
+%%
+%% ## Idempotency
+%%
+%% All payment operations are <b>idempotent</b>, which is critical for financial operations
+%% that may be retried due to network failures or client timeouts. Each operation accepts
+%% an idempotency key (a unique client-generated UUID) that prevents duplicate processing:
+%%
+%% <ul>
+%%   <li>If the key has never been seen, the operation proceeds normally</li>
+%%   <li>If the key exists, the previously created transaction is returned (no new transaction)</li>
+%% </ul>
+%%
+%% Clients should generate a new UUID for each payment request and store it client-side
+%% to safely retry failed requests with the same key.
+%%
+%% ## Transaction Reversal
+%%
+%% Posted transactions can be reversed using {@link reverse_transaction/1}. A reversal:
+%%
+%% <ul>
+%%   <li>Creates a new transaction with opposite ledger entries</li>
+%%   <li>Updates the original transaction status to <tt>reversed</tt></li>
+%%   <li>Reverses the balance changes on affected accounts</li>
+%%   <li>Links to the original transaction via description</li>
+%% </ul>
+%%
+%% Only transactions with <tt>posted</tt> status can be reversed. Attempting to reverse
+%% already-reversed or pending transactions returns an error.
+%%
+%% ## Monetary Amounts
+%%
+%% All monetary amounts are represented as non-negative integers in minor units (cents).
+%% For example, $100.00 USD is represented as <tt>10000</tt>. This avoids floating-point
+%% precision issues critical in financial systems.
+%%
+%% ## Account States
+%%
+%% Payments can only be performed on accounts with <tt>active</tt> status. Attempts to
+%% process payments on <tt>frozen</tt> or <tt>closed</tt> accounts return appropriate errors.
+%%
+%% ## Currency Validation
+%%
+%% All payment operations validate that the transaction currency matches the account
+%% currency. Cross-currency operations are not supported and return <tt>currency_mismatch</tt>.
+%%
+%% @see cb_ledger
+%% @see cb_accounts
+
 -module(cb_payments).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").
@@ -15,7 +79,39 @@
 %% Maximum allowed amount (≈ $100 billion)
 -define(MAX_AMOUNT, 9_999_999_999_99).
 
-%% @doc Transfer funds between two accounts.
+%%
+%% @doc Transfer funds between two accounts
+%%
+%% Performs an internal transfer of funds from a source account to a destination
+%% account. This is a double-entry bookkeeping operation that:
+%%
+%% <ol>
+%%   <li>Debits (decreases) the source account balance</li>
+%%   <li>Credits (increases) the destination account balance</li>
+%%   <li>Creates a transaction record linking both accounts</li>
+%%   <li>Creates two ledger entries (one debit, one credit)</li>
+%% </ol>
+%%
+%% Both accounts must have the same currency as the transfer amount. The source
+%% account must have sufficient funds. Neither account can be frozen or closed.
+%%
+%% This operation is idempotent - if the same idempotency key is provided for
+%% multiple calls, only the first call creates a transaction; subsequent calls
+%% return the existing transaction.
+%%
+%% @param IdempotencyKey A unique client-generated UUID to ensure idempotency
+%% @param SourceId The account to debit (transfer funds from)
+%% @param DestId The account to credit (transfer funds to)
+%% @param Amount The amount to transfer in minor units (cents)
+%% @param Currency The ISO 4217 currency code (must match account currency)
+%% @param Description Human-readable description of the transfer
+%%
+%% @returns <tt>{ok, Transaction}</tt> on success, or <tt>{error, Reason}</tt> on failure
+%%
+%% @see deposit/5
+%% @see withdraw/5
+%% @see reverse_transaction/1
+
 -spec transfer(binary(), uuid(), uuid(), amount(), currency(), binary()) ->
     {ok, #transaction{}} | {error, atom()}.
 transfer(IdempotencyKey, SourceId, DestId, Amount, Currency, Description) ->
@@ -31,7 +127,23 @@ transfer(IdempotencyKey, SourceId, DestId, Amount, Currency, Description) ->
             Error
     end.
 
-%% @private Internal transfer implementation.
+%% @private
+%%
+%% Internal transfer implementation that performs the actual funds transfer.
+%% This function is called after validation passes.
+%%
+%% The transfer is executed within a Mnesia transaction to ensure atomicity:
+%% <ol>
+%%   <li>Check for existing transaction with idempotency key</li>
+%%   <li>Lock both accounts for write</li>
+%%   <li>Validate accounts (status, currency, sufficient funds)</li>
+%%   <li>Update both account balances</li>
+%%   <li>Create transaction record</li>
+%%   <li>Create two ledger entries (debit and credit)</li>
+%% </ol>
+%%
+%% If any step fails, the entire transaction is rolled back.
+
 -spec do_transfer(binary(), uuid(), uuid(), amount(), currency(), binary()) ->
     {ok, #transaction{}} | {error, atom()}.
 do_transfer(IdempotencyKey, SourceId, DestId, Amount, Currency, Description) ->
@@ -118,7 +230,26 @@ do_transfer(IdempotencyKey, SourceId, DestId, Amount, Currency, Description) ->
         {aborted, _Reason} -> {error, database_error}
     end.
 
-%% @private Validate accounts for transfer.
+%% @private
+%%
+%% Validates both source and destination accounts for a transfer operation.
+%%
+%% Checks performed:
+%% <ol>
+%%   <li>Source account status is <tt>active</tt> (not frozen or closed)</li>
+%%   <li>Destination account status is <tt>active</tt></li>
+%%   <li>Both accounts have the same currency</li>
+%%   <li>The transaction currency matches the account currency</li>
+%%   <li>Source account has sufficient balance for the transfer</li>
+%% </ol>
+%%
+%% @param Source The source account record (to be debited)
+%% @param Dest The destination account record (to be credited)
+%% @param Currency The requested transaction currency
+%% @param Amount The requested transfer amount
+%%
+%% @returns <tt>ok</tt> if validation passes, or <tt>{error, Reason}</tt> if validation fails
+
 -spec validate_accounts_for_transfer(#account{}, #account{}, currency(), amount()) -> ok | {error, atom()}.
 validate_accounts_for_transfer(Source, Dest, Currency, Amount) ->
     %% Check source account status
@@ -148,7 +279,39 @@ validate_accounts_for_transfer(Source, Dest, Currency, Amount) ->
             end
     end.
 
-%% @doc Deposit funds into an account.
+%%
+%% @doc Deposit funds into an account
+%%
+%% Performs a deposit operation, crediting funds to the specified account.
+%% This is typically used for:
+%%
+%% <ul>
+%%   <li>Cash deposits at a branch or ATM</li>
+%%   <li>Incoming transfers from external systems</li>
+%%   <li>Check deposits</li>
+%%   <li>Any external source of funds</li>
+%% </ul>
+%%
+%% The deposit creates a credit ledger entry and increases the account balance.
+%% The destination account must be active and must have the same currency as
+%% the deposit amount.
+%%
+%% This operation is idempotent - if the same idempotency key is provided for
+%% multiple calls, only the first call creates a transaction; subsequent calls
+%% return the existing transaction.
+%%
+%% @param IdempotencyKey A unique client-generated UUID to ensure idempotency
+%% @param DestId The account to credit (receive funds)
+%% @param Amount The amount to deposit in minor units (cents)
+%% @param Currency The ISO 4217 currency code (must match account currency)
+%% @param Description Human-readable description of the deposit
+%%
+%% @returns <tt>{ok, Transaction}</tt> on success, or <tt>{error, Reason}</tt> on failure
+%%
+%% @see transfer/6
+%% @see withdraw/5
+%% @see reverse_transaction/1
+
 -spec deposit(binary(), uuid(), amount(), currency(), binary()) ->
     {ok, #transaction{}} | {error, atom()}.
 deposit(IdempotencyKey, DestId, Amount, Currency, Description) ->
@@ -215,7 +378,24 @@ deposit(IdempotencyKey, DestId, Amount, Currency, Description) ->
             Error
     end.
 
-%% @private Validate account for deposit.
+%% @private
+%%
+%% Validates an account for a deposit operation.
+%%
+%% Checks performed:
+%% <ol>
+%%   <li>Account status is <tt>active</tt> (not frozen or closed)</li>
+%%   <li>Account currency matches the deposit currency</li>
+%% </ol>
+%%
+%% Note: Deposits do not require sufficient funds check since they only
+%% increase the balance.
+%%
+%% @param Account The account record to validate
+%% @param Currency The requested deposit currency
+%%
+%% @returns <tt>ok</tt> if validation passes, or <tt>{error, Reason}</tt> if validation fails
+
 -spec validate_account_for_deposit(#account{}, currency()) -> ok | {error, atom()}.
 validate_account_for_deposit(Account, Currency) ->
     case Account#account.status of
@@ -228,7 +408,39 @@ validate_account_for_deposit(Account, Currency) ->
             end
     end.
 
-%% @doc Withdraw funds from an account.
+%%
+%% @doc Withdraw funds from an account
+%%
+%% Performs a withdrawal operation, debiting funds from the specified account.
+%% This is typically used for:
+%%
+%% <ul>
+%%   <li>Cash withdrawals at a branch or ATM</li>
+%%   <li>Outgoing transfers to external systems</li>
+%%   <li>Bill payments</li>
+%%   <li>Any disbursement of funds</li>
+%% </ul>
+%%
+%% The withdrawal creates a debit ledger entry and decreases the account balance.
+%% The source account must be active, must have sufficient funds, and must have
+%% the same currency as the withdrawal amount.
+%%
+%% This operation is idempotent - if the same idempotency key is provided for
+%% multiple calls, only the first call creates a transaction; subsequent calls
+%% return the existing transaction.
+%%
+%% @param IdempotencyKey A unique client-generated UUID to ensure idempotency
+%% @param SourceId The account to debit (withdraw funds from)
+%% @param Amount The amount to withdraw in minor units (cents)
+%% @param Currency The ISO 4217 currency code (must match account currency)
+%% @param Description Human-readable description of the withdrawal
+%%
+%% @returns <tt>{ok, Transaction}</tt> on success, or <tt>{error, Reason}</tt> on failure
+%%
+%% @see transfer/6
+%% @see deposit/5
+%% @see reverse_transaction/1
+
 -spec withdraw(binary(), uuid(), amount(), currency(), binary()) ->
     {ok, #transaction{}} | {error, atom()}.
 withdraw(IdempotencyKey, SourceId, Amount, Currency, Description) ->
@@ -295,7 +507,23 @@ withdraw(IdempotencyKey, SourceId, Amount, Currency, Description) ->
             Error
     end.
 
-%% @private Validate account for withdrawal.
+%% @private
+%%
+%% Validates an account for a withdrawal operation.
+%%
+%% Checks performed:
+%% <ol>
+%%   <li>Account status is <tt>active</tt> (not frozen or closed)</li>
+%%   <li>Account currency matches the withdrawal currency</li>
+%%   <li>Account has sufficient balance for the withdrawal</li>
+%% </ol>
+%%
+%% @param Account The account record to validate
+%% @param Currency The requested withdrawal currency
+%% @param Amount The requested withdrawal amount
+%%
+%% @returns <tt>ok</tt> if validation passes, or <tt>{error, Reason}</tt> if validation fails
+
 -spec validate_account_for_withdrawal(#account{}, currency(), amount()) -> ok | {error, atom()}.
 validate_account_for_withdrawal(Account, Currency, Amount) ->
     case Account#account.status of
@@ -312,7 +540,25 @@ validate_account_for_withdrawal(Account, Currency, Amount) ->
             end
     end.
 
-%% @doc Get a transaction by ID.
+%%
+%% @doc Get a transaction by ID
+%%
+%% Retrieves a single transaction from the system by its unique transaction ID.
+%% This is useful for:
+%%
+%% <ul>
+%%   <li>Transaction confirmation after a payment operation</li>
+%%   <li>Looking up transaction details for customer service</li>
+%%   <li>Audit and compliance inquiries</li>
+%% </ul>
+%%
+%% @param TxnId The unique transaction identifier (UUID)
+%%
+%% @returns <tt>{ok, Transaction}</tt> if found, or <tt>{error, transaction_not_found}</tt>
+%%
+%% @see list_transactions_for_account/3
+%% @see reverse_transaction/1
+
 -spec get_transaction(uuid()) -> {ok, #transaction{}} | {error, atom()}.
 get_transaction(TxnId) ->
     F = fun() ->
@@ -326,7 +572,32 @@ get_transaction(TxnId) ->
         {aborted, _Reason} -> {error, database_error}
     end.
 
-%% @doc List transactions for an account with pagination.
+%%
+%% @doc List transactions for an account with pagination
+%%
+%% Retrieves a paginated list of transactions for a specific account.
+%% The results include both transactions where the account is the source
+%% (money leaving) and where it is the destination (money entering).
+%%
+%% Results are sorted by creation date in descending order (newest first).
+%% Duplicate transactions (if any exist due to data anomalies) are removed.
+%%
+%% The response includes pagination metadata:
+%% <ul>
+%%   <li><tt>items</tt> - List of transaction records for the current page</li>
+%%   <li><tt>total</tt> - Total number of transactions for the account</li>
+%%   <li><tt>page</tt> - Current page number (1-indexed)</li>
+%%   <li><tt>page_size</tt> - Number of items per page</li>
+%% </ul>
+%%
+%% @param AccountId The account to list transactions for
+%% @param Page Page number (must be >= 1)
+%% @param PageSize Number of items per page (must be >= 1 and <= 100)
+%%
+%% @returns <tt>{ok, Result}</tt> with pagination data, or <tt>{error, invalid_pagination}</tt>
+%%
+%% @see get_transaction/1
+
 -spec list_transactions_for_account(uuid(), pos_integer(), pos_integer()) ->
     {ok, #{items => [#transaction{}], total => non_neg_integer(), page => pos_integer(), page_size => pos_integer()}} |
     {error, atom()}.
@@ -354,7 +625,45 @@ list_transactions_for_account(AccountId, Page, PageSize) when Page >= 1, PageSiz
 list_transactions_for_account(_, _, _) ->
     {error, invalid_pagination}.
 
-%% @doc Reverse a posted transaction.
+%%
+%% @doc Reverse a posted transaction
+%%
+%% Creates a reversal (also known as a "reversal transaction" or "void") for a
+%% previously posted transaction. This is used when:
+%%
+%% <ul>
+%%   <li>A customer requests a refund</li>
+%%   <li>A duplicate or erroneous transaction needs to be undone</li>
+%%   <li>A dispute is resolved in favor of the customer</li>
+%%   <li>Regulatory requirements mandate reversal</li>
+%% </ul>
+%%
+%% The reversal process:
+%%
+%% <ol>
+%%   <li>Verifies the original transaction exists and has <tt>posted</tt> status</li>
+%%   <li>Creates a new transaction with opposite ledger entries</li>
+%%   <li>Updates the original transaction status to <tt>reversed</tt></li>
+%%   <li>Reverses the balance changes on affected accounts</li>
+%%   <li>Links the reversal to the original via description</li>
+%% </ol>
+%%
+%% <b>Important:</b> Only transactions with <tt>posted</tt> status can be reversed.
+%% Attempting to reverse already-reversed transactions returns
+%% <tt>transaction_already_reversed</tt>. Attempting to reverse pending transactions
+%% returns <tt>transaction_not_posted</tt>.
+%%
+%% The reversal is itself idempotent - calling with the same transaction ID multiple
+%% times will return the same reversal transaction (created on first call).
+%%
+%% @param TxnId The ID of the transaction to reverse
+%%
+%% @returns <tt>{ok, ReversalTransaction}</tt> on success, or <tt>{error, Reason}</tt> on failure
+%%
+%% @see transfer/6
+%% @see deposit/5
+%% @see withdraw/5
+
 -spec reverse_transaction(uuid()) -> {ok, #transaction{}} | {error, atom()}.
 reverse_transaction(TxnId) ->
     F = fun() ->
@@ -485,7 +794,23 @@ reverse_transaction(TxnId) ->
         {aborted, _Reason} -> {error, database_error}
     end.
 
-%% @private Validate amount.
+%% @private
+%%
+%% Validates that an amount is within acceptable bounds for financial operations.
+%%
+%% Checks performed:
+%% <ol>
+%%   <li>Amount is positive (greater than zero)</li>
+%%   <li>Amount does not exceed the maximum allowed value (≈ $100 billion)</li>
+%% </ol>
+%%
+%% The maximum amount limit prevents integer overflow and ensures the system
+%% can handle amounts within reasonable bounds for a core banking system.
+%%
+%% @param Amount The amount to validate
+%%
+%% @returns <tt>ok</tt> if valid, or <tt>{error, Reason}</tt> if invalid
+
 -spec validate_amount(amount()) -> ok | {error, atom()}.
 validate_amount(Amount) when Amount =< 0 ->
     {error, zero_amount};
@@ -494,7 +819,42 @@ validate_amount(Amount) when Amount > ?MAX_AMOUNT ->
 validate_amount(_Amount) ->
     ok.
 
-%% @doc Adjust an account balance (positive adds, negative subtracts).
+%%
+%% @doc Adjust an account balance
+%%
+%% Performs a manual balance adjustment on an account. This is typically used for:
+%%
+%% <ul>
+%%   <li>Interest accrual and posting</li>
+%%   <li>Fee charges (monthly maintenance, overdraft fees)</li>
+%%   <li>Error corrections (correcting posting errors)</li>
+%%   <li>Initial account funding</li>
+%%   <li>Write-offs or bad debt recovery</li>
+%% </ul>
+%%
+%% The adjustment can be positive (credit) or negative (debit). A positive
+%% adjustment increases the account balance; a negative adjustment decreases it.
+%%
+%% This operation is idempotent - if the same idempotency key is provided for
+%% multiple calls, only the first call creates a transaction.
+%%
+%% <b>Warning:</b> This function should be used sparingly and only by authorized
+%% personnel, as it bypasses normal payment validation rules. All adjustments
+%% should be properly documented and audited.
+%%
+%% @param IdempotencyKey A unique client-generated UUID to ensure idempotency
+%% @param AccountId The account to adjust
+%% @param Amount The adjustment amount (positive adds, negative subtracts)
+%%               Must not be zero; use positive for credits, negative for debits
+%% @param Currency The ISO 4217 currency code (must match account currency)
+%% @param Description Human-readable reason for the adjustment
+%%
+%% @returns <tt>{ok, Transaction}</tt> on success, or <tt>{error, Reason}</tt> on failure
+%%
+%% @see transfer/6
+%% @see deposit/5
+%% @see withdraw/5
+
 -spec adjust_balance(binary(), uuid(), integer(), currency(), binary()) ->
     {ok, #transaction{}} | {error, atom()}.
 adjust_balance(_IdempotencyKey, _AccountId, 0, _Currency, _Description) ->
@@ -564,7 +924,26 @@ adjust_balance(IdempotencyKey, AccountId, Amount, Currency, Description) ->
         {aborted, _Reason} -> {error, database_error}
     end.
 
-%% @private Validate account for adjustment.
+%% @private
+%%
+%% Validates an account for a balance adjustment operation.
+%%
+%% Checks performed:
+%% <ol>
+%%   <li>Account status is <tt>active</tt> (not frozen or closed)</li>
+%%   <li>Account currency matches the adjustment currency</li>
+%%   <li>For negative adjustments, the account has sufficient balance</li>
+%% </ol>
+%%
+%% Note: Unlike withdrawals, negative adjustments can bring the balance to zero
+%% but not negative (cannot create an overdraft via adjustment).
+%%
+%% @param Account The account record to validate
+%% @param Currency The adjustment currency
+%% @param Amount The adjustment amount (positive or negative)
+%%
+%% @returns <tt>ok</tt> if validation passes, or <tt>{error, Reason}</tt> if validation fails
+
 -spec validate_account_for_adjustment(#account{}, currency(), integer()) -> ok | {error, atom()}.
 validate_account_for_adjustment(Account, Currency, Amount) ->
     case Account#account.status of

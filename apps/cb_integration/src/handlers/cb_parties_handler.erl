@@ -1,3 +1,44 @@
+%% @doc Parties (Customers) Handler
+%%
+%% Handler for the `/api/v1/parties` endpoint which manages customer/party records.
+%%
+%% <h2>What is a Party?</h2>
+%%
+%% In core banking terminology, a "party" represents a customer - the legal entity
+%% that owns accounts and conducts transactions. A party can be:
+%% <ul>
+%%   <li>An individual person</li>
+%%   <li>A corporation or business entity</li>
+%%   <li>A government agency</li>
+%% </ul>
+%%
+%% <h2>REST API Endpoints</h2>
+%%
+%% <ul>
+%%   <li><b>GET /api/v1/parties</b> - List all parties with pagination</li>
+%%   <li><b>POST /api/v1/parties</b> - Create a new party</li>
+%%   <li><b>OPTIONS /api/v1/parties</b> - CORS preflight</li>
+%% </ul>
+%%
+%% <h2>GET - List Parties</h2>
+%%
+%% Returns a paginated list of parties. Query parameters:
+%% <ul>
+%%   <li><code>page</code> - Page number (default: 1)</li>
+%%   <li><code>page_size</code> - Items per page (default: 20)</li>
+%% </ul>
+%%
+%% <h2>POST - Create Party</h2>
+%%
+%% Creates a new party. Required fields:
+%% <ul>
+%%   <li><code>full_name</code> - Full legal name of the party</li>
+%%   <li><code>email</code> - Contact email address</li>
+%% </ul>
+%%
+%% On success, returns 201 Created with party details.
+%%
+%% @see cb_party
 -module(cb_parties_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").

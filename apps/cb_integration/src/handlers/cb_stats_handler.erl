@@ -1,3 +1,45 @@
+%% @doc System Statistics Handler
+%%
+%% Handler for the `/api/v1/stats` endpoint which provides system-wide statistics.
+%%
+%% <h2>Purpose</h2>
+%%
+%% Provides aggregate statistics about the banking system including:
+%% <ul>
+%%   <li>Total number of parties (customers)</li>
+%%   <li>Total number of accounts</li>
+%%   <li>Total balance across all accounts</li>
+%%   <li>Account status breakdown (active, frozen, closed)</li>
+%% </ul>
+%%
+%% This endpoint is useful for:
+%% <ul>
+%%   <li>Dashboard displays</li>
+%%   <li>Monitoring and reporting</li>
+%%   <li>Admin interfaces</li>
+%% </ul>
+%%
+%% <h2>REST API Endpoints</h2>
+%%
+%% <ul>
+%%   <li><b>GET /api/v1/stats</b> - Get system statistics</li>
+%%   <li><b>OPTIONS /api/v1/stats</b> - CORS preflight</li>
+%% </ul>
+%%
+%% <h2>Response Format</h2>
+%%
+%% <pre>
+%% {
+%%   "total_parties": 100,
+%%   "total_accounts": 250,
+%%   "total_balance": 50000000,
+%%   "active_accounts": 200,
+%%   "frozen_accounts": 30,
+%%   "closed_accounts": 20
+%% }
+%% </pre>
+%%
+%% Note: All monetary values are in minor units (cents/pence).
 -module(cb_stats_handler).
 
 -include_lib("cb_ledger/include/cb_ledger.hrl").

@@ -1,8 +1,64 @@
+%% @doc HTTP Error Response Mapping
+%%
+%% This module converts internal error atoms from the business logic layer
+%% into HTTP responses suitable for API clients.
+%%
+%% <h2>Error Response Format</h2>
+%%
+%% All error responses follow a consistent JSON format:
+%% <pre>
+%% {
+%%   "error": "error_atom",
+%%   "message": "Human readable message"
+%% }
+%% </pre>
+%%
+%% This allows API clients to:
+%% <ul>
+%%   <li>Programmatically identify the error type (error atom)</li>
+%%   <li>Display a user-friendly message to end users</li>
+%%   <li>Log the error atom for debugging</li>
+%% </ul>
+%%
+%% <h2>HTTP Status Codes</h2>
+%%
+%% <ul>
+%%   <li><b>400 Bad Request</b>: Client sent invalid data (e.g., invalid JSON)</li>
+%%   <li><b>401 Unauthorized</b>: Authentication required (future use)</li>
+%%   <li><b>402 Payment Required</b>: Insufficient funds</li>
+%%   <li><b>404 Not Found</b>: Resource doesn't exist</li>
+%%   <li><b>409 Conflict</b>: Resource state prevents operation (e.g., account frozen)</li>
+%%   <li><b>422 Unprocessable Entity</b>: Business rule violation</li>
+%%   <li><b>500 Internal Server Error</b>: Unexpected system error</li>
+%% </ul>
+%%
+%% <h2>Error Categories</h2>
+%%
+%% <ol>
+%%   <li><b>Account errors</b>: Account not found, frozen, closed, balance issues</li>
+%%   <li><b>Party errors</b>: Party not found, suspended, closed, duplicate email</li>
+%%   <li><b>Transaction errors</b>: Insufficient funds, currency mismatch, idempotency</li>
+%%   <li><b>Ledger errors</b>: Entry not found, imbalance</li>
+%%   <li><b>Validation errors</b>: Missing fields, invalid format, pagination errors</li>
+%%   <li><b>System errors</b>: Database errors, internal errors, not implemented</li>
+%% </ol>
+%%
+%% @see cb_http_errors:to_response/1
 -module(cb_http_errors).
 
 -export([to_response/1]).
 
-%% @doc Convert an error atom to an HTTP response tuple {Status, ErrorAtom, Message}.
+%% @doc Convert an error atom to an HTTP response tuple.
+%%
+%% Maps an internal error atom from the business logic to a tuple containing:
+%% <ul>
+%%   <li>HTTP status code (integer)</li>
+%%   <li>Error atom (binary) - for programmatic error identification</li>
+%%   <li>Human-readable message (binary) - for display to users</li>
+%% </ul>
+%%
+%% @param ErrorAtom The internal error atom from business logic
+%% @returns `{Status, ErrorAtom, Message}' tuple ready for HTTP response
 -spec to_response(atom()) -> {non_neg_integer(), binary(), binary()}.
 
 %% Account errors
