@@ -77,6 +77,28 @@ ironledger/
 └── README.md               # This file
 ```
 
+## Documentation
+
+Comprehensive module documentation is available in two formats:
+
+### Markdown Documentation
+
+| Module | Description | Location |
+|--------|-------------|----------|
+| [Architecture](./docs/architecture.md) | System architecture overview | `docs/architecture.md` |
+| [cb_ledger](./apps/cb_ledger/README.md) | Double-entry bookkeeping | `apps/cb_ledger/README.md` |
+| [cb_accounts](./apps/cb_accounts/README.md) | Account lifecycle | `apps/cb_accounts/README.md` |
+| [cb_payments](./apps/cb_payments/README.md) | Payment processing | `apps/cb_payments/README.md` |
+| [cb_party](./apps/cb_party/README.md) | Customer management | `apps/cb_party/README.md` |
+| [cb_savings_products](./apps/cb_savings_products/README.md) | Savings products | `apps/cb_savings_products/README.md` |
+| [cb_loans](./apps/cb_loans/README.md) | Loan management | `apps/cb_loans/README.md` |
+| [cb_interest](./apps/cb_interest/README.md) | Interest calculations | `apps/cb_interest/README.md` |
+| [cb_integration](./apps/cb_integration/README.md) | HTTP API layer | `apps/cb_integration/README.md` |
+
+### HTML Documentation
+
+A browsable HTML documentation website is available in `docs/website/`. Open `docs/website/index.html` in a browser for an interactive documentation experience.
+
 ### OTP Application Structure
 
 IronLedger follows OTP application standards:
