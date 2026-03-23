@@ -52,6 +52,11 @@
 %%   <li>`account' - Bank accounts</li>
 %%   <li>`transaction' - Financial transactions</li>
 %%   <li>`ledger_entry' - Double-entry ledger entries</li>
+%%   <li>`savings_product' - Savings product definitions</li>
+%%   <li>`loan_products' - Loan product definitions</li>
+%%   <li>`loan_accounts' - Loan accounts</li>
+%%   <li>`loan_repayments' - Loan repayment records</li>
+%%   <li>`interest_accrual' - Interest accrual tracking</li>
 %% </ul>
 %%
 %% Each table is created with the specification defined in table_spec/1.
@@ -60,7 +65,8 @@
 %% @returns `ok' on success (always succeeds if Mnesia is running)
 -spec create_tables() -> ok.
 create_tables() ->
-    Tables = [party, account, transaction, ledger_entry],
+    Tables = [party, account, transaction, ledger_entry, savings_product,
+              loan_products, loan_accounts, loan_repayments, interest_accrual],
     lists:foreach(fun create_if_not_exists/1, Tables),
     ok.
 
@@ -72,7 +78,10 @@ create_tables() ->
 %%
 %% @param TableName The name of the table to create
 %% @returns `ok' on success
--spec create_if_not_exists(party | account | transaction | ledger_entry) -> ok.
+-spec create_if_not_exists(
+    party | account | transaction | ledger_entry |
+    savings_product | loan_products | loan_accounts | loan_repayments | interest_accrual
+) -> ok.
 create_if_not_exists(TableName) ->
     case mnesia:create_table(TableName, table_spec(TableName)) of
         {atomic, ok} ->
@@ -94,11 +103,16 @@ create_if_not_exists(TableName) ->
 %%
 %% @param TableName The table to get spec for
 %% @returns Mnesia table specification proplist
--spec table_spec(party | account | transaction | ledger_entry) ->
-    [{'attributes',[atom(),...]} |
-     {'index',['account_id' | 'dest_account_id' | 'email' | 'idempotency_key' |
-               'party_id' | 'source_account_id' | 'status' | 'txn_id',...]} |
-     {'ram_copies',[atom(),...]},...].
+-spec table_spec(
+    party | account | transaction | ledger_entry |
+    savings_product | loan_products | loan_accounts | loan_repayments | interest_accrual
+) ->
+    [{'attributes', [atom(), ...]} |
+     {'index', ['account_id' | 'currency' | 'dest_account_id' | 'email' |
+                'idempotency_key' | 'loan_id' | 'name' | 'party_id' |
+                'source_account_id' | 'status' | 'txn_id', ...]} |
+     {'record_name', 'loan_account' | 'loan_product' | 'loan_repayment'} |
+     {'ram_copies', [atom(), ...]}, ...].
 table_spec(party) ->
     [
         {ram_copies, [node()]},
@@ -122,4 +136,49 @@ table_spec(ledger_entry) ->
         {ram_copies, [node()]},
         {attributes, record_info(fields, ledger_entry)},
         {index, [txn_id, account_id]}
+    ];
+table_spec(savings_product) ->
+    [
+        {ram_copies, [node()]},
+        {attributes, [product_id, name, description, currency, interest_rate,
+                      interest_type, compounding_period, minimum_balance,
+                      status, created_at, updated_at]},
+        {index, [status, name]}
+    ];
+table_spec(loan_products) ->
+    [
+        {ram_copies, [node()]},
+        {record_name, loan_product},
+        {attributes, [product_id, name, description, currency, min_amount,
+                      max_amount, min_term_months, max_term_months,
+                      interest_rate, interest_type, status, created_at,
+                      updated_at]},
+        {index, [status, currency]}
+    ];
+table_spec(loan_accounts) ->
+    [
+        {ram_copies, [node()]},
+        {record_name, loan_account},
+        {attributes, [loan_id, product_id, party_id, account_id, principal,
+                      currency, interest_rate, term_months, monthly_payment,
+                      outstanding_balance, status, disbursed_at, created_at,
+                      updated_at]},
+        {index, [party_id, account_id, status]}
+    ];
+table_spec(loan_repayments) ->
+    [
+        {ram_copies, [node()]},
+        {record_name, loan_repayment},
+        {attributes, [repayment_id, loan_id, amount, principal_portion,
+                      interest_portion, penalty, due_date, paid_at, status,
+                      created_at]},
+        {index, [loan_id, status]}
+    ];
+table_spec(interest_accrual) ->
+    [
+        {ram_copies, [node()]},
+        {attributes, [accrual_id, account_id, product_id, interest_rate,
+                      daily_rate, start_date, end_date, balance,
+                      accrued_amount, status, created_at]},
+        {index, [account_id, status]}
     ].

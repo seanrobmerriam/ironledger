@@ -1,0 +1,22 @@
+FROM erlang:25
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git \
+    && git clone --depth 1 --branch 3.24.0 https://github.com/erlang/rebar3.git /tmp/rebar3 \
+    && cd /tmp/rebar3 \
+    && ./bootstrap \
+    && mv /tmp/rebar3/rebar3 /usr/local/bin/rebar3 \
+    && chmod +x /usr/local/bin/rebar3 \
+    && rm -rf /tmp/rebar3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY . .
+
+RUN rebar3 compile \
+    && rebar3 release
+
+EXPOSE 8081
+
+CMD ["_build/default/rel/ironledger/bin/ironledger", "foreground"]

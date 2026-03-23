@@ -59,7 +59,10 @@
 %%
 %% @param ErrorAtom The internal error atom from business logic
 %% @returns `{Status, ErrorAtom, Message}' tuple ready for HTTP response
--spec to_response(atom()) -> {non_neg_integer(), binary(), binary()}.
+-spec to_response(term()) ->
+    {400 | 402 | 404 | 409 | 422 | 500 | 501,
+     <<_:64, _:_*8>>,
+     <<_:64, _:_*8>>}.
 
 %% Account errors
 to_response(account_not_found) ->
@@ -120,6 +123,36 @@ to_response(ledger_entry_not_found) ->
     {404, <<"ledger_entry_not_found">>, <<"Ledger entry not found">>};
 to_response(ledger_imbalance) ->
     {500, <<"ledger_imbalance">>, <<"Ledger imbalance detected">>};
+
+%% Product / Loan / Interest errors
+to_response(product_not_found) ->
+    {404, <<"product_not_found">>, <<"Product not found">>};
+to_response(product_already_active) ->
+    {409, <<"product_already_active">>, <<"Product is already active">>};
+to_response(product_already_inactive) ->
+    {409, <<"product_already_inactive">>, <<"Product is already inactive">>};
+to_response(not_found) ->
+    {404, <<"not_found">>, <<"Resource not found">>};
+to_response(accrual_not_found) ->
+    {404, <<"accrual_not_found">>, <<"Interest accrual not found">>};
+to_response(invalid_interest_type) ->
+    {422, <<"invalid_interest_type">>, <<"Invalid interest type">>};
+to_response(invalid_compounding_period) ->
+    {422, <<"invalid_compounding_period">>, <<"Invalid compounding period">>};
+to_response(invalid_interest_rate) ->
+    {422, <<"invalid_interest_rate">>, <<"Invalid interest rate">>};
+to_response(interest_rate_too_high) ->
+    {422, <<"interest_rate_too_high">>, <<"Interest rate exceeds the allowed maximum">>};
+to_response(invalid_term) ->
+    {422, <<"invalid_term">>, <<"Invalid loan term">>};
+to_response(term_too_long) ->
+    {422, <<"term_too_long">>, <<"Loan term exceeds the allowed maximum">>};
+to_response(invalid_product_id) ->
+    {422, <<"invalid_product_id">>, <<"Invalid product identifier">>};
+to_response(invalid_status) ->
+    {409, <<"invalid_status">>, <<"Operation is not allowed in the current status">>};
+to_response(invalid_parameters) ->
+    {422, <<"invalid_parameters">>, <<"Invalid parameters">>};
 
 %% Validation errors
 to_response(missing_required_field) ->

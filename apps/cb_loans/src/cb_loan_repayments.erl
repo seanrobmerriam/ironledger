@@ -148,6 +148,7 @@ update_repayment_status(RepaymentId, Status) ->
 init([]) ->
     case mnesia:create_table(?TABLE, [
         {attributes, record_info(fields, loan_repayment)},
+        {record_name, loan_repayment},
         {type, set},
         {ram_copies, [node()]}
     ]) of
@@ -208,10 +209,10 @@ do_record_repayment(LoanId, Amount, DueDate, PrincipalPortion) ->
                 penalty = Penalty,
                 due_date = DueDate,
                 paid_at = Now,
-                status = pending,
+                status = paid,
                 created_at = Now
             },
-            Fun = fun() -> mnesia:write(Repayment) end,
+            Fun = fun() -> mnesia:write(?TABLE, Repayment, write) end,
             case mnesia:transaction(Fun) of
                 {atomic, _} -> {ok, RepaymentId};
                 {aborted, Reason} -> {error, Reason}
@@ -268,7 +269,7 @@ do_update_repayment_status(RepaymentId, Status) ->
                             status = Status,
                             paid_at = erlang:system_time(millisecond)
                         },
-                        mnesia:write(Updated),
+                        mnesia:write(?TABLE, Updated, write),
                         {ok, Updated};
                     [] ->
                         {error, not_found}

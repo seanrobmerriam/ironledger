@@ -58,11 +58,14 @@
 %%% @param AccountId The UUID of the account to start accruing interest for
 %%% @param ProductId The UUID of the interest-bearing product
 %%% @param Balance The initial balance in minor units
-%%% @param AnnualRate The annual interest rate as a decimal (e.g., 0.05 for 5%)
+%%% @param AnnualRate The annual interest rate in basis points
 %%% @returns {ok, InterestAccrual} on success, {error, Reason} on failure
 %%%
 -spec start_accrual(uuid(), uuid(), amount(), interest_rate()) -> {ok, interest_accrual()} | {error, atom()}.
-start_accrual(AccountId, ProductId, Balance, AnnualRate) when is_binary(AccountId), is_binary(ProductId), is_integer(Balance), Balance >= 0, is_float(AnnualRate), AnnualRate >= 0 ->
+start_accrual(AccountId, ProductId, Balance, AnnualRate)
+        when is_binary(AccountId), is_binary(ProductId),
+             is_integer(Balance), Balance >= 0,
+             is_integer(AnnualRate), AnnualRate >= 0 ->
     F = fun() ->
         case mnesia:read(account, AccountId) of
             [] ->
@@ -119,15 +122,14 @@ start_accrual(AccountId, ProductId, Balance, AnnualRate) when is_binary(AccountI
 -spec calculate_daily_accrual(uuid(), amount()) -> amount().
 calculate_daily_accrual(AccountId, Balance) when is_binary(AccountId), is_integer(Balance), Balance >= 0 ->
     F = fun() ->
-        case mnesia:read(?ACCRUAL_TABLE, AccountId) of
+        case mnesia:index_read(?ACCRUAL_TABLE, AccountId, account_id) of
             [] ->
                 0;
-            [Accrual] ->
+            [Accrual | _] ->
                 case Accrual#interest_accrual.status of
                     accruing ->
                         DailyRate = Accrual#interest_accrual.daily_rate,
-                        Interest = cb_interest:calculate_interest(Balance, DailyRate, 1),
-                        Accrual#interest_accrual.balance + Interest;
+                        cb_interest:calculate_interest(Balance, DailyRate, 1);
                     _ ->
                         0
                 end

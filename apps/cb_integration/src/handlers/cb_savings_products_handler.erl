@@ -13,13 +13,13 @@ handle(<<"POST">>, Req, State) ->
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     case jsone:try_decode(Body) of
         {ok, Json, _} ->
-            RequiredFields = [<<"name">>, <<"description">>, <<"currency">>, <<"interest_rate">>, <<"interest_type">>, <<"compounding_period">>, <<"minimum_balance">>],
+            RequiredFields = [<<"name">>, <<"description">>, <<"currency">>, <<"interest_rate_bps">>, <<"interest_type">>, <<"compounding_period">>, <<"minimum_balance">>],
             case has_all_required_fields(Json, RequiredFields) of
                 true ->
                     Name = maps:get(<<"name">>, Json),
                     Description = maps:get(<<"description">>, Json),
                     CurrencyBin = maps:get(<<"currency">>, Json),
-                    InterestRate = maps:get(<<"interest_rate">>, Json),
+                    InterestRate = maps:get(<<"interest_rate_bps">>, Json),
                     InterestTypeBin = maps:get(<<"interest_type">>, Json),
                     CompoundingPeriodBin = maps:get(<<"compounding_period">>, Json),
                     MinimumBalance = maps:get(<<"minimum_balance">>, Json),
@@ -55,19 +55,35 @@ handle(<<"POST">>, Req, State) ->
     end;
 
 handle(<<"GET">>, Req, State) ->
-    ProductId = cowboy_req:binding(product_id, Req),
-    case cb_savings_products:get_product(ProductId) of
-        {ok, Product} ->
-            Resp = product_to_json(Product),
-            Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
-            Req2 = cowboy_req:reply(200, Headers, jsone:encode(Resp), Req),
-            {ok, Req2, State};
-        {error, Reason} ->
-            {Status, ErrorAtom, Message} = cb_http_errors:to_response(Reason),
-            Resp = #{error => ErrorAtom, message => Message},
-            Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
-            Req2 = cowboy_req:reply(Status, Headers, jsone:encode(Resp), Req),
-            {ok, Req2, State}
+    case cowboy_req:binding(product_id, Req) of
+        undefined ->
+            case cb_savings_products:list_products() of
+                {ok, Products} ->
+                    Resp = #{items => [product_to_json(Product) || Product <- Products]},
+                    Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
+                    Req2 = cowboy_req:reply(200, Headers, jsone:encode(Resp), Req),
+                    {ok, Req2, State};
+                {error, Reason} ->
+                    {Status, ErrorAtom, Message} = cb_http_errors:to_response(Reason),
+                    Resp = #{error => ErrorAtom, message => Message},
+                    Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
+                    Req2 = cowboy_req:reply(Status, Headers, jsone:encode(Resp), Req),
+                    {ok, Req2, State}
+            end;
+        ProductId ->
+            case cb_savings_products:get_product(ProductId) of
+                {ok, Product} ->
+                    Resp = product_to_json(Product),
+                    Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
+                    Req2 = cowboy_req:reply(200, Headers, jsone:encode(Resp), Req),
+                    {ok, Req2, State};
+                {error, Reason} ->
+                    {Status, ErrorAtom, Message} = cb_http_errors:to_response(Reason),
+                    Resp = #{error => ErrorAtom, message => Message},
+                    Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
+                    Req2 = cowboy_req:reply(Status, Headers, jsone:encode(Resp), Req),
+                    {ok, Req2, State}
+            end
     end;
 
 handle(<<"OPTIONS">>, Req, State) ->
@@ -88,7 +104,7 @@ product_to_json(Product) ->
         name => Product#savings_product.name,
         description => Product#savings_product.description,
         currency => Product#savings_product.currency,
-        interest_rate => Product#savings_product.interest_rate,
+        interest_rate_bps => Product#savings_product.interest_rate,
         interest_type => Product#savings_product.interest_type,
         compounding_period => Product#savings_product.compounding_period,
         minimum_balance => Product#savings_product.minimum_balance,

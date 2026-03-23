@@ -100,7 +100,7 @@ create_product_ok(_Config) ->
         <<"Premium Savings">>,
         <<"High interest savings account">>,
         'USD',
-        2.5,
+        250,
         simple,
         monthly,
         1000
@@ -108,7 +108,7 @@ create_product_ok(_Config) ->
     ?assertEqual(<<"Premium Savings">>, Product#savings_product.name),
     ?assertEqual(<<"High interest savings account">>, Product#savings_product.description),
     ?assertEqual('USD', Product#savings_product.currency),
-    ?assertEqual(2.5, Product#savings_product.interest_rate),
+    ?assertEqual(250, Product#savings_product.interest_rate),
     ?assertEqual(simple, Product#savings_product.interest_type),
     ?assertEqual(monthly, Product#savings_product.compounding_period),
     ?assertEqual(1000, Product#savings_product.minimum_balance),
@@ -122,7 +122,7 @@ get_product_ok(_Config) ->
         <<"Basic Savings">>,
         <<"Simple savings account">>,
         'EUR',
-        1.5,
+        150,
         compound,
         quarterly,
         500
@@ -136,11 +136,11 @@ get_product_ok(_Config) ->
 %% Test: List all savings products
 list_products_ok(_Config) ->
     {ok, _P1} = cb_savings_products:create_product(
-        <<"Product 1">>, <<"Desc 1">>, 'USD', 1.0, simple, daily, 100),
+        <<"Product 1">>, <<"Desc 1">>, 'USD', 100, simple, daily, 100),
     {ok, _P2} = cb_savings_products:create_product(
-        <<"Product 2">>, <<"Desc 2">>, 'GBP', 2.0, compound, monthly, 200),
+        <<"Product 2">>, <<"Desc 2">>, 'GBP', 200, compound, monthly, 200),
     {ok, _P3} = cb_savings_products:create_product(
-        <<"Product 3">>, <<"Desc 3">>, 'EUR', 3.0, simple, quarterly, 300),
+        <<"Product 3">>, <<"Desc 3">>, 'EUR', 300, simple, quarterly, 300),
 
     {ok, Products} = cb_savings_products:list_products(),
     ?assertEqual(3, length(Products)),
@@ -149,7 +149,7 @@ list_products_ok(_Config) ->
 %% Test: Activate an inactive product
 activate_product_ok(_Config) ->
     {ok, Created} = cb_savings_products:create_product(
-        <<"Test Product">>, <<"Test">>, 'USD', 1.0, simple, daily, 100),
+        <<"Test Product">>, <<"Test">>, 'USD', 100, simple, daily, 100),
     % Products are created as active by default, so deactivate first
     {ok, Inactive} = cb_savings_products:deactivate_product(Created#savings_product.product_id),
     ?assertEqual(inactive, Inactive#savings_product.status),
@@ -161,7 +161,7 @@ activate_product_ok(_Config) ->
 %% Test: Deactivate an active product
 deactivate_product_ok(_Config) ->
     {ok, Created} = cb_savings_products:create_product(
-        <<"Test Product">>, <<"Test">>, 'USD', 1.0, simple, daily, 100),
+        <<"Test Product">>, <<"Test">>, 'USD', 100, simple, daily, 100),
     ?assertEqual(active, Created#savings_product.status),
 
     {ok, Deactivated} = cb_savings_products:deactivate_product(Created#savings_product.product_id),
@@ -175,28 +175,28 @@ deactivate_product_ok(_Config) ->
 %% Test: Create product with unsupported currency
 create_product_invalid_currency(_Config) ->
     {error, Reason} = cb_savings_products:create_product(
-        <<"Test">>, <<"Test">>, 'XYZ', 1.0, simple, daily, 100),
+        <<"Test">>, <<"Test">>, 'XYZ', 100, simple, daily, 100),
     ?assertEqual(unsupported_currency, Reason),
     ok.
 
 %% Test: Create product with invalid interest type
 create_product_invalid_interest_type(_Config) ->
     {error, Reason} = cb_savings_products:create_product(
-        <<"Test">>, <<"Test">>, 'USD', 1.0, invalid_type, daily, 100),
+        <<"Test">>, <<"Test">>, 'USD', 100, invalid_type, daily, 100),
     ?assertEqual(invalid_interest_type, Reason),
     ok.
 
 %% Test: Create product with invalid compounding period
 create_product_invalid_compounding_period(_Config) ->
     {error, Reason} = cb_savings_products:create_product(
-        <<"Test">>, <<"Test">>, 'USD', 1.0, simple, invalid_period, 100),
+        <<"Test">>, <<"Test">>, 'USD', 100, simple, invalid_period, 100),
     ?assertEqual(invalid_compounding_period, Reason),
     ok.
 
 %% Test: Create product with invalid parameters (negative minimum balance)
 create_product_invalid_parameters(_Config) ->
     {error, Reason} = cb_savings_products:create_product(
-        <<"Test">>, <<"Test">>, 'USD', 1.0, simple, daily, -100),
+        <<"Test">>, <<"Test">>, 'USD', 100, simple, daily, -100),
     ?assertEqual(invalid_parameters, Reason),
     ok.
 
@@ -223,7 +223,7 @@ activate_product_not_found(_Config) ->
 %% Test: Activate already active product
 activate_product_already_active(_Config) ->
     {ok, Created} = cb_savings_products:create_product(
-        <<"Test">>, <<"Test">>, 'USD', 1.0, simple, daily, 100),
+        <<"Test">>, <<"Test">>, 'USD', 100, simple, daily, 100),
     % Already active by default
     {error, Reason} = cb_savings_products:activate_product(Created#savings_product.product_id),
     ?assertEqual(product_already_active, Reason),
@@ -245,7 +245,7 @@ deactivate_product_not_found(_Config) ->
 %% Test: Deactivate already inactive product
 deactivate_product_already_inactive(_Config) ->
     {ok, Created} = cb_savings_products:create_product(
-        <<"Test">>, <<"Test">>, 'USD', 1.0, simple, daily, 100),
+        <<"Test">>, <<"Test">>, 'USD', 100, simple, daily, 100),
     {ok, _Inactive} = cb_savings_products:deactivate_product(Created#savings_product.product_id),
     {error, Reason} = cb_savings_products:deactivate_product(Created#savings_product.product_id),
     ?assertEqual(product_already_inactive, Reason),
@@ -266,8 +266,8 @@ create_product_zero_minimum_balance(_Config) ->
     {ok, Product} = cb_savings_products:create_product(
         <<"Zero Minimum">>,
         <<"No minimum balance required">>,
-        'CHF',
-        0.5,
+        'JPY',
+        50,
         compound,
         annually,
         0
@@ -288,7 +288,7 @@ list_products_empty(_Config) ->
 %% Test: Full product lifecycle - create, deactivate, then activate
 create_and_activate_product(_Config) ->
     {ok, Created} = cb_savings_products:create_product(
-        <<"Lifecycle Product">>, <<"Testing lifecycle">>, 'JPY', 0.1, simple, monthly, 10000),
+        <<"Lifecycle Product">>, <<"Testing lifecycle">>, 'JPY', 10, simple, monthly, 10000),
     ?assertEqual(active, Created#savings_product.status),
 
     {ok, Deactivated} = cb_savings_products:deactivate_product(Created#savings_product.product_id),
@@ -302,7 +302,7 @@ create_and_activate_product(_Config) ->
 %% Test: Full product lifecycle - create, activate, then deactivate
 create_and_deactivate_product(_Config) ->
     {ok, Created} = cb_savings_products:create_product(
-        <<"Lifecycle Product 2">>, <<"Testing lifecycle 2">>, 'GBP', 1.0, compound, quarterly, 5000),
+        <<"Lifecycle Product 2">>, <<"Testing lifecycle 2">>, 'GBP', 100, compound, quarterly, 5000),
     ?assertEqual(active, Created#savings_product.status),
 
     {ok, Deactivated} = cb_savings_products:deactivate_product(Created#savings_product.product_id),

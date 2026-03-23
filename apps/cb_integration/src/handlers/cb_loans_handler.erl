@@ -231,7 +231,7 @@ loan_to_json(Loan) ->
         account_id => Loan#loan_account.account_id,
         principal => Loan#loan_account.principal,
         currency => Loan#loan_account.currency,
-        interest_rate => Loan#loan_account.interest_rate,
+        interest_rate_bps => Loan#loan_account.interest_rate,
         term_months => Loan#loan_account.term_months,
         monthly_payment => Loan#loan_account.monthly_payment,
         outstanding_balance => Loan#loan_account.outstanding_balance,

@@ -70,13 +70,18 @@
 -type compounding_period() :: daily | monthly | quarterly | annually.
 
 %%%
-%%% @doc Interest rate represented as a floating-point number.
+%%% @doc Annual interest rate represented in basis points.
 %%%
-%%% This is the annual interest rate expressed as a decimal (e.g., 0.05 for 5% APR).
-%%% Interest rates in banking are typically expressed as annual rates, then divided
-%%% to calculate daily, monthly, or period-specific amounts.
+%%% 100 basis points = 1.00%. 500 basis points = 5.00%.
 %%%
--type interest_rate() :: float().
+-type interest_rate() :: non_neg_integer().
+
+%%% @doc Daily rate represented as a fraction in parts per billion.
+%%%
+%%% This keeps daily accrual calculations integer-safe while preserving more
+%%% precision than whole basis points per day.
+%%%
+-type daily_rate_ppb() :: non_neg_integer().
 
 %%%
 %%% @doc Status of an interest accrual record.
@@ -102,9 +107,9 @@
 %%%
 %%% <li><b>product_id</b>: The savings/loan product UUID defining the interest terms.</li>
 %%%
-%%% <li><b>interest_rate</b>: The annual interest rate (as decimal, e.g., 0.05 = 5%).</li>
+%%% <li><b>interest_rate</b>: The annual interest rate in basis points.</li>
 %%%
-%%% <li><b>daily_rate</b>: The daily interest rate (annual_rate / 365).</li>
+%%% <li><b>daily_rate</b>: The daily rate in parts per billion.</li>
 %%%
 %%% <li><b>start_date</b>: Timestamp (milliseconds since epoch) when accrual began.</li>
 %%%
@@ -124,7 +129,7 @@
     account_id     :: binary(),
     product_id     :: binary(),
     interest_rate  :: interest_rate(),
-    daily_rate     :: interest_rate(),
+    daily_rate     :: daily_rate_ppb(),
     start_date     :: non_neg_integer(),
     end_date       :: non_neg_integer() | undefined,
     balance        :: non_neg_integer(),
@@ -151,7 +156,7 @@
 %%%
 %%% <li><b>compounding_period</b>: How often compound interest is calculated.</li>
 %%%
-%%% <li><b>annual_rate</b>: The annual interest rate as a decimal (e.g., 0.0325 = 3.25%).</li>
+%%% <li><b>annual_rate</b>: The annual interest rate in basis points.</li>
 %%% </ul>
 %%%
 -type interest_product() :: #{
@@ -165,6 +170,7 @@
     interest_type/0,
     compounding_period/0,
     interest_rate/0,
+    daily_rate_ppb/0,
     accrual_status/0,
     interest_accrual/0,
     interest_product/0

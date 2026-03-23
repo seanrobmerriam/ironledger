@@ -13,7 +13,7 @@ handle(<<"POST">>, Req, State) ->
     {ok, Body, Req2} = cowboy_req:read_body(Req),
     case jsone:try_decode(Body) of
         {ok, Json, _} ->
-            RequiredFields = [<<"name">>, <<"description">>, <<"currency">>, <<"min_amount">>, <<"max_amount">>, <<"min_term_months">>, <<"max_term_months">>, <<"interest_rate">>, <<"interest_type">>],
+            RequiredFields = [<<"name">>, <<"description">>, <<"currency">>, <<"min_amount">>, <<"max_amount">>, <<"min_term_months">>, <<"max_term_months">>, <<"interest_rate_bps">>, <<"interest_type">>],
             case has_all_required_fields(Json, RequiredFields) of
                 true ->
                     Name = maps:get(<<"name">>, Json),
@@ -23,7 +23,7 @@ handle(<<"POST">>, Req, State) ->
                     MaxAmount = maps:get(<<"max_amount">>, Json),
                     MinTermMonths = maps:get(<<"min_term_months">>, Json),
                     MaxTermMonths = maps:get(<<"max_term_months">>, Json),
-                    InterestRate = maps:get(<<"interest_rate">>, Json),
+                    InterestRate = maps:get(<<"interest_rate_bps">>, Json),
                     InterestTypeBin = maps:get(<<"interest_type">>, Json),
                     Currency = binary_to_atom(CurrencyBin, utf8),
                     InterestType = binary_to_atom(InterestTypeBin, utf8),
@@ -56,19 +56,29 @@ handle(<<"POST">>, Req, State) ->
     end;
 
 handle(<<"GET">>, Req, State) ->
-    ProductId = cowboy_req:binding(product_id, Req),
-    case cb_loan_products:get_product(ProductId) of
-        {ok, Product} ->
-            Resp = product_to_json(Product),
+    case cowboy_req:binding(product_id, Req) of
+        undefined ->
+            Products = cb_loan_products:list_products(),
+            Resp = #{
+                items => [product_to_json(Product) || Product <- Products]
+            },
             Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
             Req2 = cowboy_req:reply(200, Headers, jsone:encode(Resp), Req),
             {ok, Req2, State};
-        {error, Reason} ->
-            {Status, ErrorAtom, Message} = cb_http_errors:to_response(Reason),
-            Resp = #{error => ErrorAtom, message => Message},
-            Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
-            Req2 = cowboy_req:reply(Status, Headers, jsone:encode(Resp), Req),
-            {ok, Req2, State}
+        ProductId ->
+            case cb_loan_products:get_product(ProductId) of
+                {ok, Product} ->
+                    Resp = product_to_json(Product),
+                    Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
+                    Req2 = cowboy_req:reply(200, Headers, jsone:encode(Resp), Req),
+                    {ok, Req2, State};
+                {error, Reason} ->
+                    {Status, ErrorAtom, Message} = cb_http_errors:to_response(Reason),
+                    Resp = #{error => ErrorAtom, message => Message},
+                    Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
+                    Req2 = cowboy_req:reply(Status, Headers, jsone:encode(Resp), Req),
+                    {ok, Req2, State}
+            end
     end;
 
 handle(<<"OPTIONS">>, Req, State) ->
@@ -93,7 +103,7 @@ product_to_json(Product) ->
         max_amount => Product#loan_product.max_amount,
         min_term_months => Product#loan_product.min_term_months,
         max_term_months => Product#loan_product.max_term_months,
-        interest_rate => Product#loan_product.interest_rate,
+        interest_rate_bps => Product#loan_product.interest_rate,
         interest_type => Product#loan_product.interest_type,
         status => Product#loan_product.status,
         created_at => Product#loan_product.created_at,

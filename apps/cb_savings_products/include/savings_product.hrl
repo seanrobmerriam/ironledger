@@ -14,13 +14,13 @@
 %%% ### Key Concepts
 %%%
 %%% - **Interest Rate**: The annual percentage rate (APR) applied to the account
-%%%   balance. Expressed as a decimal (e.g., 0.05 = 5% APR).
+%%%   balance. Expressed as basis points (e.g., 500 = 5.00% APR).
 %%%
-%%% - **Interest Type**: 
+%%% - **Interest Type**:
 %%%   * `simple` - Interest calculated only on the principal balance
 %%%   * `compound` - Interest calculated on principal + accumulated interest
 %%%
-%%% - **Compounding Period**: How frequently interest is calculated and 
+%%% - **Compounding Period**: How frequently interest is calculated and
 %%%   added to the account:
 %%%   * `daily` - Interest compounds every day (365 periods/year)
 %%%   * `monthly` - Interest compounds monthly (12 periods/year)
@@ -60,9 +60,8 @@
 %%% - `currency`: ISO 4217 currency code (atom) - 'USD', 'EUR', 'GBP', etc.
 %%%   All monetary values for this product are denominated in this currency.
 %%%
-%%% - `interest_rate`: Annual interest rate as a decimal.
-%%%   Example: 0.0475 = 4.75% APR. Stored as float for flexibility but
-%%%   should be validated to 4 decimal places maximum.
+%%% - `interest_rate`: Annual interest rate in basis points.
+%%%   Example: 475 = 4.75% APR.
 %%%
 %%% - `interest_type`: Either `simple` or `compound`.
 %%%   Simple: Interest = Principal × Rate × Time
@@ -87,7 +86,7 @@
     name                :: binary(),
     description         :: binary(),
     currency            :: atom(),
-    interest_rate       :: float(),
+    interest_rate       :: non_neg_integer(),
     interest_type       :: atom(),
     compounding_period  :: atom(),
     minimum_balance     :: integer(),
@@ -105,7 +104,7 @@
 %%%
 %%% @doc Type alias for valid currency codes.
 %%%
--type currency_code() :: 'USD' | 'EUR' | 'GBP' | 'JPY' | 'CHF'.
+-type currency_code() :: 'USD' | 'EUR' | 'GBP' | 'JPY'.
 %%% ISO 4217 three-letter uppercase currency codes supported by the system.
 
 %%%
@@ -140,7 +139,7 @@
 %%%
 %%% @doc Valid currency codes for savings products.
 %%%
--define(VALID_CURRENCIES, ['USD', 'EUR', 'GBP', 'JPY', 'CHF']).
+-define(VALID_CURRENCIES, ['USD', 'EUR', 'GBP', 'JPY']).
 
 %%%
 %%% @doc Valid interest type options.

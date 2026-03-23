@@ -55,24 +55,34 @@ record_repayment(LoanId, Req, State) ->
                     PaymentType = maps:get(<<"payment_type">>, Json),
                     case cb_loan_accounts:get_loan(LoanId) of
                         {ok, Loan} ->
-                            DueDate = calculate_due_date(Loan),
-                            PrincipalPortion = case PaymentType of
-                                <<"full">> -> Loan#loan_account.outstanding_balance;
-                                <<"partial">> -> Amount;
-                                _ -> Amount
-                            end,
-                            case cb_loan_repayments:record_repayment(LoanId, Amount, DueDate, PrincipalPortion) of
-                                {ok, RepaymentId} ->
-                                    case cb_loan_accounts:make_repayment(LoanId, Amount) of
-                                        {ok, UpdatedLoan, NewBalance} ->
-                                            Resp = #{
-                                                repayment_id => RepaymentId,
-                                                outstanding_balance => NewBalance,
-                                                status => UpdatedLoan#loan_account.status
-                                            },
-                                            Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
-                                            Req3 = cowboy_req:reply(200, Headers, jsone:encode(Resp), Req2),
-                                            {ok, Req3, State};
+                            case Loan#loan_account.status of
+                                disbursed ->
+                                    DueDate = calculate_due_date(Loan),
+                                    PrincipalPortion = case PaymentType of
+                                        <<"full">> -> Loan#loan_account.outstanding_balance;
+                                        <<"partial">> -> Amount;
+                                        _ -> Amount
+                                    end,
+                                    case cb_loan_repayments:record_repayment(LoanId, Amount, DueDate, PrincipalPortion) of
+                                        {ok, RepaymentId} ->
+                                            case cb_loan_accounts:make_repayment(LoanId, Amount) of
+                                                {ok, UpdatedLoan, NewBalance} ->
+                                                    Resp = #{
+                                                        repayment_id => RepaymentId,
+                                                        outstanding_balance => NewBalance,
+                                                        status => paid,
+                                                        loan_status => UpdatedLoan#loan_account.status
+                                                    },
+                                                    Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
+                                                    Req3 = cowboy_req:reply(200, Headers, jsone:encode(Resp), Req2),
+                                                    {ok, Req3, State};
+                                                {error, Reason} ->
+                                                    {Status, ErrorAtom, Message} = cb_http_errors:to_response(Reason),
+                                                    Resp = #{error => ErrorAtom, message => Message},
+                                                    Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
+                                                    Req3 = cowboy_req:reply(Status, Headers, jsone:encode(Resp), Req2),
+                                                    {ok, Req3, State}
+                                            end;
                                         {error, Reason} ->
                                             {Status, ErrorAtom, Message} = cb_http_errors:to_response(Reason),
                                             Resp = #{error => ErrorAtom, message => Message},
@@ -80,8 +90,8 @@ record_repayment(LoanId, Req, State) ->
                                             Req3 = cowboy_req:reply(Status, Headers, jsone:encode(Resp), Req2),
                                             {ok, Req3, State}
                                     end;
-                                {error, Reason} ->
-                                    {Status, ErrorAtom, Message} = cb_http_errors:to_response(Reason),
+                                _OtherStatus ->
+                                    {Status, ErrorAtom, Message} = cb_http_errors:to_response(invalid_status),
                                     Resp = #{error => ErrorAtom, message => Message},
                                     Headers = maps:merge(#{<<"content-type">> => <<"application/json">>}, cb_cors:headers()),
                                     Req3 = cowboy_req:reply(Status, Headers, jsone:encode(Resp), Req2),

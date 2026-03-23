@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"syscall/js"
 	"time"
 )
@@ -22,10 +23,10 @@ func (a *App) renderDashboardHome() js.Value {
 		colorClass string
 		stat       int
 	}{
-		{"Total Customers", "", "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z", "blue", a.Stats.TotalCustomers},
-		{"Total Accounts", "", "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z", "green", a.Stats.TotalAccounts},
-		{"Total Balance", FormatAmount(a.Stats.TotalBalance, "USD"), "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", "purple", 0},
-		{"Today's Transactions", "", "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4", "orange", a.Stats.TodayTxns},
+		{"Total Customers", "", "group", "blue", a.Stats.TotalCustomers},
+		{"Total Accounts", "", "account_balance", "green", a.Stats.TotalAccounts},
+		{"Total Balance", FormatAmount(a.Stats.TotalBalance, "USD"), "payments", "purple", 0},
+		{"Today's Transactions", "", "receipt_long", "orange", a.Stats.TodayTxns},
 	}
 
 	for _, card := range cards {
@@ -38,18 +39,7 @@ func (a *App) renderDashboardHome() js.Value {
 		iconWrapper := doc.Call("createElement", "div")
 		iconWrapper.Set("className", "card-icon "+card.colorClass)
 
-		icon := doc.Call("createElement", "svg")
-		icon.Set("className", "icon")
-		icon.Call("setAttribute", "fill", "none")
-		icon.Call("setAttribute", "viewBox", "0 0 24 24")
-		icon.Call("setAttribute", "stroke", "currentColor")
-		icon.Call("setAttribute", "stroke-width", "2")
-
-		iconPath := doc.Call("createElement", "path")
-		iconPath.Call("setAttribute", "stroke-linecap", "round")
-		iconPath.Call("setAttribute", "stroke-linejoin", "round")
-		iconPath.Set("d", card.icon)
-		icon.Call("appendChild", iconPath)
+		icon := createMaterialIcon(doc, card.icon, "icon")
 		iconWrapper.Call("appendChild", icon)
 
 		cardHeader.Call("appendChild", iconWrapper)
@@ -183,10 +173,12 @@ func (a *App) renderDashboardHome() js.Value {
 		view  string
 		color string
 	}{
-		{"New Customer", "Add a new customer to the system", "M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z", "customers", "primary"},
-		{"New Account", "Open a new account for a customer", "M12 6v6m0 0v6m0-6h6m-6 0H6", "accounts", "success"},
-		{"Transfer", "Transfer funds between accounts", "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4", "transfer", "info"},
-		{"View Transactions", "Browse all transactions", "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2", "transactions", "warning"},
+		{"New Customer", "Add a new customer to the system", "person_add", "customers", "primary"},
+		{"New Account", "Open a new account for a customer", "add_card", "accounts", "success"},
+		{"New Product", "Create savings and loan products", "inventory_2", "products", "info"},
+		{"Manage Loans", "Create, approve, disburse and repay loans", "request_quote", "loans", "warning"},
+		{"Transfer", "Transfer funds between accounts", "swap_horiz", "transfer", "info"},
+		{"View Transactions", "Browse all transactions", "receipt_long", "transactions", "warning"},
 	}
 
 	quickGrid := doc.Call("createElement", "div")
@@ -199,19 +191,7 @@ func (a *App) renderDashboardHome() js.Value {
 		actionIcon := doc.Call("createElement", "div")
 		actionIcon.Set("className", "action-icon "+action.color)
 
-		iconSvg := doc.Call("createElement", "svg")
-		iconSvg.Set("className", "icon")
-		iconSvg.Call("setAttribute", "fill", "none")
-		iconSvg.Call("setAttribute", "viewBox", "0 0 24 24")
-		iconSvg.Call("setAttribute", "stroke", "currentColor")
-		iconSvg.Call("setAttribute", "stroke-width", "2")
-
-		iconPath := doc.Call("createElement", "path")
-		iconPath.Call("setAttribute", "stroke-linecap", "round")
-		iconPath.Call("setAttribute", "stroke-linejoin", "round")
-		iconPath.Set("d", action.icon)
-		iconSvg.Call("appendChild", iconPath)
-		actionIcon.Call("appendChild", iconSvg)
+		actionIcon.Call("appendChild", createMaterialIcon(doc, action.icon, "icon"))
 
 		actionLabel := doc.Call("createElement", "div")
 		actionLabel.Set("className", "action-label")
@@ -233,9 +213,18 @@ func (a *App) renderDashboardHome() js.Value {
 			if viewName == "customers" {
 				a.ListParties(js.Value{}, nil)
 			} else if viewName == "accounts" {
+				a.ListParties(js.Value{}, nil)
 				a.ListAllAccounts(js.Value{}, nil)
 			} else if viewName == "transactions" {
 				a.ListAllTransactions(js.Value{}, nil)
+			} else if viewName == "products" {
+				a.ListSavingsProducts(js.Value{}, nil)
+				a.ListLoanProducts(js.Value{}, nil)
+			} else if viewName == "loans" {
+				a.ListParties(js.Value{}, nil)
+				a.ListAllAccounts(js.Value{}, nil)
+				a.ListLoanProducts(js.Value{}, nil)
+				a.ListLoansForSelectedParty()
 			}
 			a.Render()
 			return nil
@@ -333,6 +322,7 @@ func (a *App) renderCustomersView() js.Value {
 	formActions.Set("className", "form-actions")
 
 	saveBtn := doc.Call("createElement", "button")
+	saveBtn.Set("id", "create-customer-button")
 	saveBtn.Set("className", "btn btn-primary")
 	saveBtn.Set("textContent", "Create Customer")
 	saveBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
@@ -474,6 +464,85 @@ func (a *App) renderAccountsListView() js.Value {
 	toolbar.Call("appendChild", searchWrapper)
 
 	container.Call("appendChild", toolbar)
+
+	formCard := doc.Call("createElement", "div")
+	formCard.Set("className", "form-card")
+	formCard.Call("setAttribute", "data-testid", "create-account-form")
+
+	formTitle := doc.Call("createElement", "h3")
+	formTitle.Set("textContent", "Open New Account")
+	formCard.Call("appendChild", formTitle)
+
+	form := doc.Call("createElement", "div")
+	form.Set("className", "form-stack")
+
+	partySelect := doc.Call("createElement", "select")
+	partySelect.Set("id", "account-party-select")
+	partySelect.Set("className", "form-select")
+	emptyParty := doc.Call("createElement", "option")
+	emptyParty.Set("value", "")
+	emptyParty.Set("textContent", "Select customer")
+	partySelect.Call("appendChild", emptyParty)
+	for _, party := range a.Parties {
+		option := doc.Call("createElement", "option")
+		option.Set("value", party.PartyID)
+		option.Set("textContent", party.FullName+" ("+party.Email+")")
+		if a.SelectedParty != nil && a.SelectedParty.PartyID == party.PartyID {
+			option.Set("selected", true)
+		}
+		partySelect.Call("appendChild", option)
+	}
+	form.Call("appendChild", labeledNode(doc, "Customer", partySelect))
+
+	accountNameInput := doc.Call("createElement", "input")
+	accountNameInput.Set("id", "account-name")
+	accountNameInput.Set("type", "text")
+	accountNameInput.Set("className", "form-input")
+	accountNameInput.Set("placeholder", "Main Checking")
+	form.Call("appendChild", labeledNode(doc, "Account Name", accountNameInput))
+
+	currencySelect := doc.Call("createElement", "select")
+	currencySelect.Set("id", "account-currency")
+	currencySelect.Set("className", "form-select")
+	appendOptions(doc, currencySelect, []string{"USD", "EUR", "GBP", "JPY"})
+	form.Call("appendChild", labeledNode(doc, "Currency", currencySelect))
+
+	createBtn := doc.Call("createElement", "button")
+	createBtn.Set("id", "create-account-button")
+	createBtn.Set("className", "btn btn-primary")
+	createBtn.Set("textContent", "Create Account")
+	createBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		partyID := doc.Call("getElementById", "account-party-select").Get("value").String()
+		accountName := doc.Call("getElementById", "account-name").Get("value").String()
+		if partyID == "" {
+			a.Error = "Select a customer first"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		if accountName == "" {
+			a.Error = "Account name is required"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		for _, party := range a.Parties {
+			if party.PartyID == partyID {
+				chosen := party
+				a.SelectedParty = &chosen
+				break
+			}
+		}
+		a.CreateAccount(js.Value{}, []js.Value{
+			js.ValueOf(partyID),
+			js.ValueOf(accountName),
+			js.ValueOf(doc.Call("getElementById", "account-currency").Get("value").String()),
+		})
+		return nil
+	}))
+	form.Call("appendChild", createBtn)
+	formCard.Call("appendChild", form)
+	container.Call("appendChild", formCard)
 
 	// Filter by status
 	filterBar := doc.Call("createElement", "div")
@@ -1445,6 +1514,597 @@ func (a *App) renderDepositView() js.Value {
 	return container
 }
 
+func (a *App) renderProductsView() js.Value {
+	doc := js.Global().Get("document")
+	container := doc.Call("createElement", "div")
+	container.Set("className", "products-view")
+
+	toolbar := doc.Call("createElement", "div")
+	toolbar.Set("className", "view-toolbar")
+
+	title := doc.Call("createElement", "h3")
+	title.Set("textContent", "Product Management")
+	toolbar.Call("appendChild", title)
+
+	refreshBtn := doc.Call("createElement", "button")
+	refreshBtn.Set("className", "btn btn-secondary")
+	refreshBtn.Set("textContent", "Refresh Products")
+	refreshBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		a.ListSavingsProducts(js.Value{}, nil)
+		a.ListLoanProducts(js.Value{}, nil)
+		return nil
+	}))
+	toolbar.Call("appendChild", refreshBtn)
+	container.Call("appendChild", toolbar)
+
+	forms := doc.Call("createElement", "div")
+	forms.Set("className", "two-col-forms")
+
+	savingsCard := doc.Call("createElement", "div")
+	savingsCard.Set("className", "form-card")
+	savingsTitle := doc.Call("createElement", "h3")
+	savingsTitle.Set("textContent", "Create Savings Product")
+	savingsCard.Call("appendChild", savingsTitle)
+	savingsForm := doc.Call("createElement", "div")
+	savingsForm.Set("className", "form-stack")
+
+	for _, field := range []struct {
+		label       string
+		id          string
+		placeholder string
+		inputType   string
+	}{
+		{"Name", "savings-name", "High Yield Savings", "text"},
+		{"Description", "savings-description", "Product description", "text"},
+		{"Interest Rate (bps)", "savings-rate-bps", "450", "number"},
+		{"Minimum Balance", "savings-minimum-balance", "100.00", "text"},
+	} {
+		label := doc.Call("createElement", "label")
+		label.Set("textContent", field.label)
+		savingsForm.Call("appendChild", label)
+		input := doc.Call("createElement", "input")
+		input.Set("id", field.id)
+		input.Set("type", field.inputType)
+		input.Set("className", "form-input")
+		input.Set("placeholder", field.placeholder)
+		savingsForm.Call("appendChild", input)
+	}
+
+	savingsCurrency := doc.Call("createElement", "select")
+	savingsCurrency.Set("id", "savings-currency")
+	savingsCurrency.Set("className", "form-select")
+	appendOptions(doc, savingsCurrency, []string{"USD", "EUR", "GBP", "JPY"})
+	savingsForm.Call("appendChild", labeledNode(doc, "Currency", savingsCurrency))
+
+	savingsInterestType := doc.Call("createElement", "select")
+	savingsInterestType.Set("id", "savings-interest-type")
+	savingsInterestType.Set("className", "form-select")
+	appendOptions(doc, savingsInterestType, []string{"simple", "compound"})
+	savingsForm.Call("appendChild", labeledNode(doc, "Interest Type", savingsInterestType))
+
+	savingsCompounding := doc.Call("createElement", "select")
+	savingsCompounding.Set("id", "savings-compounding-period")
+	savingsCompounding.Set("className", "form-select")
+	appendOptions(doc, savingsCompounding, []string{"daily", "monthly", "quarterly", "annually"})
+	savingsForm.Call("appendChild", labeledNode(doc, "Compounding Period", savingsCompounding))
+
+	savingsBtn := doc.Call("createElement", "button")
+	savingsBtn.Set("id", "create-savings-product-button")
+	savingsBtn.Set("className", "btn btn-primary")
+	savingsBtn.Set("textContent", "Create Savings Product")
+	savingsBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		rateBps, err := strconv.ParseInt(doc.Call("getElementById", "savings-rate-bps").Get("value").String(), 10, 64)
+		if err != nil {
+			a.Error = "Invalid interest rate"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		minimumBalance, err := ParseAmount(doc.Call("getElementById", "savings-minimum-balance").Get("value").String())
+		if err != nil {
+			a.Error = "Invalid minimum balance"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		a.CreateSavingsProduct(js.Value{}, []js.Value{
+			js.ValueOf(doc.Call("getElementById", "savings-name").Get("value").String()),
+			js.ValueOf(doc.Call("getElementById", "savings-description").Get("value").String()),
+			js.ValueOf(doc.Call("getElementById", "savings-currency").Get("value").String()),
+			js.ValueOf(int(rateBps)),
+			js.ValueOf(doc.Call("getElementById", "savings-interest-type").Get("value").String()),
+			js.ValueOf(doc.Call("getElementById", "savings-compounding-period").Get("value").String()),
+			js.ValueOf(minimumBalance),
+		})
+		return nil
+	}))
+	savingsForm.Call("appendChild", savingsBtn)
+	savingsCard.Call("appendChild", savingsForm)
+	forms.Call("appendChild", savingsCard)
+
+	loanCard := doc.Call("createElement", "div")
+	loanCard.Set("className", "form-card")
+	loanTitle := doc.Call("createElement", "h3")
+	loanTitle.Set("textContent", "Create Loan Product")
+	loanCard.Call("appendChild", loanTitle)
+	loanForm := doc.Call("createElement", "div")
+	loanForm.Set("className", "form-stack")
+
+	for _, field := range []struct {
+		label       string
+		id          string
+		placeholder string
+		inputType   string
+	}{
+		{"Name", "loan-product-name", "Starter Loan", "text"},
+		{"Description", "loan-product-description", "Loan product description", "text"},
+		{"Min Amount", "loan-product-min-amount", "100.00", "text"},
+		{"Max Amount", "loan-product-max-amount", "5000.00", "text"},
+		{"Min Term (months)", "loan-product-min-term", "6", "number"},
+		{"Max Term (months)", "loan-product-max-term", "24", "number"},
+		{"Interest Rate (bps)", "loan-product-rate-bps", "1200", "number"},
+	} {
+		label := doc.Call("createElement", "label")
+		label.Set("textContent", field.label)
+		loanForm.Call("appendChild", label)
+		input := doc.Call("createElement", "input")
+		input.Set("id", field.id)
+		input.Set("type", field.inputType)
+		input.Set("className", "form-input")
+		input.Set("placeholder", field.placeholder)
+		loanForm.Call("appendChild", input)
+	}
+
+	loanCurrency := doc.Call("createElement", "select")
+	loanCurrency.Set("id", "loan-product-currency")
+	loanCurrency.Set("className", "form-select")
+	appendOptions(doc, loanCurrency, []string{"USD", "EUR", "GBP", "JPY"})
+	loanForm.Call("appendChild", labeledNode(doc, "Currency", loanCurrency))
+
+	loanInterestType := doc.Call("createElement", "select")
+	loanInterestType.Set("id", "loan-product-interest-type")
+	loanInterestType.Set("className", "form-select")
+	appendOptions(doc, loanInterestType, []string{"flat", "declining"})
+	loanForm.Call("appendChild", labeledNode(doc, "Interest Type", loanInterestType))
+
+	loanBtn := doc.Call("createElement", "button")
+	loanBtn.Set("id", "create-loan-product-button")
+	loanBtn.Set("className", "btn btn-primary")
+	loanBtn.Set("textContent", "Create Loan Product")
+	loanBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		minTerm, minTermErr := strconv.ParseInt(doc.Call("getElementById", "loan-product-min-term").Get("value").String(), 10, 64)
+		maxTerm, maxTermErr := strconv.ParseInt(doc.Call("getElementById", "loan-product-max-term").Get("value").String(), 10, 64)
+		rateBps, rateErr := strconv.ParseInt(doc.Call("getElementById", "loan-product-rate-bps").Get("value").String(), 10, 64)
+		minAmount, minErr := ParseAmount(doc.Call("getElementById", "loan-product-min-amount").Get("value").String())
+		maxAmount, maxErr := ParseAmount(doc.Call("getElementById", "loan-product-max-amount").Get("value").String())
+		if minErr != nil || maxErr != nil {
+			a.Error = "Invalid loan product amounts"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		if minTermErr != nil || maxTermErr != nil {
+			a.Error = "Invalid loan product term"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		if rateErr != nil {
+			a.Error = "Invalid loan product rate"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		a.CreateLoanProduct(js.Value{}, []js.Value{
+			js.ValueOf(doc.Call("getElementById", "loan-product-name").Get("value").String()),
+			js.ValueOf(doc.Call("getElementById", "loan-product-description").Get("value").String()),
+			js.ValueOf(doc.Call("getElementById", "loan-product-currency").Get("value").String()),
+			js.ValueOf(minAmount),
+			js.ValueOf(maxAmount),
+			js.ValueOf(int(minTerm)),
+			js.ValueOf(int(maxTerm)),
+			js.ValueOf(int(rateBps)),
+			js.ValueOf(doc.Call("getElementById", "loan-product-interest-type").Get("value").String()),
+		})
+		return nil
+	}))
+	loanForm.Call("appendChild", loanBtn)
+	loanCard.Call("appendChild", loanForm)
+	forms.Call("appendChild", loanCard)
+
+	container.Call("appendChild", forms)
+
+	container.Call("appendChild", a.renderSavingsProductsTable())
+	container.Call("appendChild", a.renderLoanProductsTable())
+	return container
+}
+
+func (a *App) renderSavingsProductsTable() js.Value {
+	doc := js.Global().Get("document")
+	card := doc.Call("createElement", "div")
+	card.Set("className", "dashboard-card")
+	title := doc.Call("createElement", "h3")
+	title.Set("textContent", "Savings Products")
+	card.Call("appendChild", title)
+
+	if len(a.SavingsProducts) == 0 {
+		empty := doc.Call("createElement", "div")
+		empty.Set("className", "empty-state")
+		empty.Set("textContent", "No savings products yet")
+		card.Call("appendChild", empty)
+		return card
+	}
+
+	table := doc.Call("createElement", "table")
+	table.Set("className", "data-table")
+	thead := doc.Call("createElement", "thead")
+	headRow := doc.Call("createElement", "tr")
+	for _, header := range []string{"Name", "Currency", "Rate", "Type", "Minimum Balance", "Status"} {
+		th := doc.Call("createElement", "th")
+		th.Set("textContent", header)
+		headRow.Call("appendChild", th)
+	}
+	thead.Call("appendChild", headRow)
+	table.Call("appendChild", thead)
+	tbody := doc.Call("createElement", "tbody")
+	for _, product := range a.SavingsProducts {
+		row := doc.Call("createElement", "tr")
+		appendCell(doc, row, product.Name)
+		appendCell(doc, row, product.Currency)
+		appendCell(doc, row, strconv.FormatInt(product.InterestRateBps, 10)+" bps")
+		appendCell(doc, row, capitalize(product.InterestType)+" / "+capitalize(product.CompoundingPeriod))
+		appendCell(doc, row, FormatAmount(product.MinimumBalance, product.Currency))
+		appendCell(doc, row, capitalize(product.Status))
+		tbody.Call("appendChild", row)
+	}
+	table.Call("appendChild", tbody)
+	card.Call("appendChild", table)
+	return card
+}
+
+func (a *App) renderLoanProductsTable() js.Value {
+	doc := js.Global().Get("document")
+	card := doc.Call("createElement", "div")
+	card.Set("className", "dashboard-card")
+	title := doc.Call("createElement", "h3")
+	title.Set("textContent", "Loan Products")
+	card.Call("appendChild", title)
+
+	if len(a.LoanProducts) == 0 {
+		empty := doc.Call("createElement", "div")
+		empty.Set("className", "empty-state")
+		empty.Set("textContent", "No loan products yet")
+		card.Call("appendChild", empty)
+		return card
+	}
+
+	table := doc.Call("createElement", "table")
+	table.Set("className", "data-table")
+	thead := doc.Call("createElement", "thead")
+	headRow := doc.Call("createElement", "tr")
+	for _, header := range []string{"Name", "Currency", "Amount Range", "Term Range", "Rate", "Status"} {
+		th := doc.Call("createElement", "th")
+		th.Set("textContent", header)
+		headRow.Call("appendChild", th)
+	}
+	thead.Call("appendChild", headRow)
+	table.Call("appendChild", thead)
+	tbody := doc.Call("createElement", "tbody")
+	for _, product := range a.LoanProducts {
+		row := doc.Call("createElement", "tr")
+		appendCell(doc, row, product.Name)
+		appendCell(doc, row, product.Currency)
+		appendCell(doc, row, FormatAmount(product.MinAmount, product.Currency)+" - "+FormatAmount(product.MaxAmount, product.Currency))
+		appendCell(doc, row, strconv.FormatInt(product.MinTermMonths, 10)+"-"+strconv.FormatInt(product.MaxTermMonths, 10)+" mo")
+		appendCell(doc, row, strconv.FormatInt(product.InterestRateBps, 10)+" bps "+capitalize(product.InterestType))
+		appendCell(doc, row, capitalize(product.Status))
+		tbody.Call("appendChild", row)
+	}
+	table.Call("appendChild", tbody)
+	card.Call("appendChild", table)
+	return card
+}
+
+func (a *App) renderLoansView() js.Value {
+	doc := js.Global().Get("document")
+	container := doc.Call("createElement", "div")
+	container.Set("className", "loans-view")
+
+	toolbar := doc.Call("createElement", "div")
+	toolbar.Set("className", "view-toolbar")
+
+	partySelect := doc.Call("createElement", "select")
+	partySelect.Set("id", "loan-party-select")
+	partySelect.Set("className", "form-select")
+	emptyParty := doc.Call("createElement", "option")
+	emptyParty.Set("value", "")
+	emptyParty.Set("textContent", "Select customer")
+	partySelect.Call("appendChild", emptyParty)
+	for _, party := range a.Parties {
+		option := doc.Call("createElement", "option")
+		option.Set("value", party.PartyID)
+		option.Set("textContent", party.FullName+" ("+party.Email+")")
+		if a.SelectedParty != nil && a.SelectedParty.PartyID == party.PartyID {
+			option.Set("selected", true)
+		}
+		partySelect.Call("appendChild", option)
+	}
+	partySelect.Call("addEventListener", "change", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		selectedID := this.Get("value").String()
+		a.SelectedParty = nil
+		for _, party := range a.Parties {
+			if party.PartyID == selectedID {
+				chosen := party
+				a.SelectedParty = &chosen
+				break
+			}
+		}
+		a.SelectedLoan = nil
+		a.LoanRepayments = nil
+		a.ListLoansForSelectedParty()
+		a.Render()
+		return nil
+	}))
+	toolbar.Call("appendChild", labeledNode(doc, "Customer", partySelect))
+
+	refreshBtn := doc.Call("createElement", "button")
+	refreshBtn.Set("className", "btn btn-secondary")
+	refreshBtn.Set("textContent", "Refresh Loans")
+	refreshBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		a.ListParties(js.Value{}, nil)
+		a.ListAllAccounts(js.Value{}, nil)
+		a.ListLoanProducts(js.Value{}, nil)
+		a.ListLoansForSelectedParty()
+		return nil
+	}))
+	toolbar.Call("appendChild", refreshBtn)
+	container.Call("appendChild", toolbar)
+
+	formCard := doc.Call("createElement", "div")
+	formCard.Set("className", "form-card")
+	formTitle := doc.Call("createElement", "h3")
+	formTitle.Set("textContent", "Create Loan")
+	formCard.Call("appendChild", formTitle)
+	form := doc.Call("createElement", "div")
+	form.Set("className", "form-stack")
+
+	productSelect := doc.Call("createElement", "select")
+	productSelect.Set("id", "loan-create-product")
+	productSelect.Set("className", "form-select")
+	for _, product := range a.LoanProducts {
+		option := doc.Call("createElement", "option")
+		option.Set("value", product.ProductID)
+		option.Set("textContent", product.Name+" ("+product.Currency+")")
+		productSelect.Call("appendChild", option)
+	}
+	form.Call("appendChild", labeledNode(doc, "Loan Product", productSelect))
+
+	accountSelect := doc.Call("createElement", "select")
+	accountSelect.Set("id", "loan-create-account")
+	accountSelect.Set("className", "form-select")
+	for _, account := range a.selectedPartyAccounts() {
+		option := doc.Call("createElement", "option")
+		option.Set("value", account.AccountID)
+		option.Set("textContent", account.Name+" ("+account.Currency+")")
+		accountSelect.Call("appendChild", option)
+	}
+	form.Call("appendChild", labeledNode(doc, "Disbursement Account", accountSelect))
+
+	principalInput := doc.Call("createElement", "input")
+	principalInput.Set("id", "loan-create-principal")
+	principalInput.Set("type", "text")
+	principalInput.Set("className", "form-input")
+	principalInput.Set("placeholder", "1000.00")
+	form.Call("appendChild", labeledNode(doc, "Principal", principalInput))
+
+	termInput := doc.Call("createElement", "input")
+	termInput.Set("id", "loan-create-term")
+	termInput.Set("type", "number")
+	termInput.Set("className", "form-input")
+	termInput.Set("placeholder", "12")
+	form.Call("appendChild", labeledNode(doc, "Term (months)", termInput))
+
+	createBtn := doc.Call("createElement", "button")
+	createBtn.Set("id", "create-loan-button")
+	createBtn.Set("className", "btn btn-primary")
+	createBtn.Set("textContent", "Create Loan")
+	createBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		if a.SelectedParty == nil {
+			a.Error = "Select a customer first"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		principal, err := ParseAmount(doc.Call("getElementById", "loan-create-principal").Get("value").String())
+		if err != nil {
+			a.Error = "Invalid principal amount"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		termMonths, termErr := strconv.ParseInt(doc.Call("getElementById", "loan-create-term").Get("value").String(), 10, 64)
+		if termErr != nil {
+			a.Error = "Invalid loan term"
+			a.Success = ""
+			a.Render()
+			return nil
+		}
+		a.CreateLoan(js.Value{}, []js.Value{
+			js.ValueOf(a.SelectedParty.PartyID),
+			js.ValueOf(doc.Call("getElementById", "loan-create-product").Get("value").String()),
+			js.ValueOf(doc.Call("getElementById", "loan-create-account").Get("value").String()),
+			js.ValueOf(principal),
+			js.ValueOf(int(termMonths)),
+		})
+		return nil
+	}))
+	form.Call("appendChild", createBtn)
+	formCard.Call("appendChild", form)
+	container.Call("appendChild", formCard)
+
+	container.Call("appendChild", a.renderLoansTable())
+	if a.SelectedLoan != nil {
+		container.Call("appendChild", a.renderLoanRepaymentsPanel())
+	}
+	return container
+}
+
+func (a *App) renderLoansTable() js.Value {
+	doc := js.Global().Get("document")
+	card := doc.Call("createElement", "div")
+	card.Set("className", "dashboard-card")
+	title := doc.Call("createElement", "h3")
+	title.Set("textContent", "Loans")
+	card.Call("appendChild", title)
+
+	if len(a.Loans) == 0 {
+		empty := doc.Call("createElement", "div")
+		empty.Set("className", "empty-state")
+		if a.SelectedParty == nil {
+			empty.Set("textContent", "Select a customer to view loans")
+		} else {
+			empty.Set("textContent", "No loans for the selected customer")
+		}
+		card.Call("appendChild", empty)
+		return card
+	}
+
+	table := doc.Call("createElement", "table")
+	table.Set("className", "data-table")
+	thead := doc.Call("createElement", "thead")
+	headRow := doc.Call("createElement", "tr")
+	for _, header := range []string{"Loan", "Product", "Principal", "Outstanding", "Monthly Payment", "Status", "Actions"} {
+		th := doc.Call("createElement", "th")
+		th.Set("textContent", header)
+		headRow.Call("appendChild", th)
+	}
+	thead.Call("appendChild", headRow)
+	table.Call("appendChild", thead)
+	tbody := doc.Call("createElement", "tbody")
+
+	for _, loan := range a.Loans {
+		row := doc.Call("createElement", "tr")
+		appendCell(doc, row, truncateID(loan.LoanID))
+		appendCell(doc, row, a.loanProductName(loan.ProductID))
+		appendCell(doc, row, FormatAmount(loan.Principal, loan.Currency))
+		appendCell(doc, row, FormatAmount(loan.OutstandingBalance, loan.Currency))
+		appendCell(doc, row, FormatAmount(loan.MonthlyPayment, loan.Currency))
+		appendCell(doc, row, capitalize(loan.Status))
+
+		actions := doc.Call("createElement", "td")
+		viewLoan := loan
+		viewBtn := a.createActionButton("View", "primary", func() {
+			a.GetLoan(js.Value{}, []js.Value{js.ValueOf(viewLoan.LoanID)})
+		})
+		actions.Call("appendChild", viewBtn)
+		if loan.Status == "pending" {
+			approveLoan := loan
+			actions.Call("appendChild", a.createActionButton("Approve", "success", func() {
+				a.ApproveLoan(js.Value{}, []js.Value{js.ValueOf(approveLoan.LoanID)})
+			}))
+		}
+		if loan.Status == "approved" {
+			disburseLoan := loan
+			actions.Call("appendChild", a.createActionButton("Disburse", "warning", func() {
+				a.DisburseLoan(js.Value{}, []js.Value{js.ValueOf(disburseLoan.LoanID)})
+			}))
+		}
+		row.Call("appendChild", actions)
+		tbody.Call("appendChild", row)
+	}
+
+	table.Call("appendChild", tbody)
+	card.Call("appendChild", table)
+	return card
+}
+
+func (a *App) renderLoanRepaymentsPanel() js.Value {
+	doc := js.Global().Get("document")
+	container := doc.Call("createElement", "div")
+	container.Set("className", "dashboard-card")
+
+	title := doc.Call("createElement", "h3")
+	title.Set("textContent", "Loan Details and Repayments")
+	container.Call("appendChild", title)
+
+	summary := doc.Call("createElement", "div")
+	summary.Set("className", "detail-stats")
+	appendStat(summary, "Loan ID", truncateID(a.SelectedLoan.LoanID))
+	appendStat(summary, "Outstanding", FormatAmount(a.SelectedLoan.OutstandingBalance, a.SelectedLoan.Currency))
+	appendStat(summary, "Status", capitalize(a.SelectedLoan.Status))
+	container.Call("appendChild", summary)
+
+	form := doc.Call("createElement", "div")
+	form.Set("className", "form-stack")
+	repaymentAmount := doc.Call("createElement", "input")
+	repaymentAmount.Set("id", "loan-repayment-amount")
+	repaymentAmount.Set("type", "text")
+	repaymentAmount.Set("className", "form-input")
+	repaymentAmount.Set("placeholder", "50.00")
+	form.Call("appendChild", labeledNode(doc, "Repayment Amount", repaymentAmount))
+
+	paymentType := doc.Call("createElement", "select")
+	paymentType.Set("id", "loan-repayment-type")
+	paymentType.Set("className", "form-select")
+	appendOptions(doc, paymentType, []string{"partial", "full"})
+	form.Call("appendChild", labeledNode(doc, "Payment Type", paymentType))
+
+	repaymentBtn := doc.Call("createElement", "button")
+	repaymentBtn.Set("id", "record-loan-repayment-button")
+	repaymentBtn.Set("className", "btn btn-primary")
+	repaymentBtn.Set("textContent", "Record Repayment")
+	selectedLoanID := a.SelectedLoan.LoanID
+	repaymentBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		amount, err := ParseAmount(doc.Call("getElementById", "loan-repayment-amount").Get("value").String())
+		if err != nil {
+			a.Error = "Invalid repayment amount"
+			a.Render()
+			return nil
+		}
+		a.RecordLoanRepayment(js.Value{}, []js.Value{
+			js.ValueOf(selectedLoanID),
+			js.ValueOf(amount),
+			js.ValueOf(doc.Call("getElementById", "loan-repayment-type").Get("value").String()),
+		})
+		return nil
+	}))
+	form.Call("appendChild", repaymentBtn)
+	container.Call("appendChild", form)
+
+	if len(a.LoanRepayments) == 0 {
+		empty := doc.Call("createElement", "div")
+		empty.Set("className", "empty-state")
+		empty.Set("textContent", "No repayments recorded yet")
+		container.Call("appendChild", empty)
+		return container
+	}
+
+	table := doc.Call("createElement", "table")
+	table.Set("className", "data-table")
+	thead := doc.Call("createElement", "thead")
+	headRow := doc.Call("createElement", "tr")
+	for _, header := range []string{"Amount", "Principal", "Interest", "Status", "Paid At"} {
+		th := doc.Call("createElement", "th")
+		th.Set("textContent", header)
+		headRow.Call("appendChild", th)
+	}
+	thead.Call("appendChild", headRow)
+	table.Call("appendChild", thead)
+	tbody := doc.Call("createElement", "tbody")
+	for _, repayment := range a.LoanRepayments {
+		row := doc.Call("createElement", "tr")
+		appendCell(doc, row, FormatAmount(repayment.Amount, a.SelectedLoan.Currency))
+		appendCell(doc, row, FormatAmount(repayment.PrincipalPortion, a.SelectedLoan.Currency))
+		appendCell(doc, row, FormatAmount(repayment.InterestPortion, a.SelectedLoan.Currency))
+		appendCell(doc, row, capitalize(repayment.Status))
+		appendCell(doc, row, formatTimestamp(repayment.PaidAt))
+		tbody.Call("appendChild", row)
+	}
+	table.Call("appendChild", tbody)
+	container.Call("appendChild", table)
+	return container
+}
+
 // Helper functions
 func (a *App) createActionButton(label string, color string, action func()) js.Value {
 	doc := js.Global().Get("document")
@@ -1540,17 +2200,70 @@ func truncateID(id string) string {
 	return id
 }
 
+func appendOptions(doc js.Value, selectEl js.Value, options []string) {
+	for _, value := range options {
+		option := doc.Call("createElement", "option")
+		option.Set("value", value)
+		option.Set("textContent", value)
+		selectEl.Call("appendChild", option)
+	}
+}
+
+func labeledNode(doc js.Value, labelText string, node js.Value) js.Value {
+	wrapper := doc.Call("createElement", "div")
+	label := doc.Call("createElement", "label")
+	label.Set("textContent", labelText)
+	wrapper.Call("appendChild", label)
+	wrapper.Call("appendChild", node)
+	return wrapper
+}
+
+func appendCell(doc js.Value, row js.Value, value string) {
+	cell := doc.Call("createElement", "td")
+	cell.Set("textContent", value)
+	row.Call("appendChild", cell)
+}
+
+func appendStat(container js.Value, labelText string, value string) {
+	doc := js.Global().Get("document")
+	stat := doc.Call("createElement", "div")
+	stat.Set("className", "detail-stat")
+	label := doc.Call("createElement", "div")
+	label.Set("className", "stat-label")
+	label.Set("textContent", labelText)
+	stat.Call("appendChild", label)
+	content := doc.Call("createElement", "div")
+	content.Set("className", "stat-value")
+	content.Set("textContent", value)
+	stat.Call("appendChild", content)
+	container.Call("appendChild", stat)
+}
+
+func (a *App) selectedPartyAccounts() []Account {
+	if a.SelectedParty == nil {
+		return a.Accounts
+	}
+
+	var filtered []Account
+	for _, account := range a.Accounts {
+		if account.PartyID == a.SelectedParty.PartyID {
+			filtered = append(filtered, account)
+		}
+	}
+	return filtered
+}
+
+func (a *App) loanProductName(productID string) string {
+	for _, product := range a.LoanProducts {
+		if product.ProductID == productID {
+			return product.Name
+		}
+	}
+	return truncateID(productID)
+}
+
 func formatNumber(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var result string
-	for n > 0 {
-		digit := n % 10
-		result = string('0'+digit) + result
-		n /= 10
-	}
-	return result
+	return strconv.Itoa(n)
 }
 
 func formatTimestamp(ts int64) string {

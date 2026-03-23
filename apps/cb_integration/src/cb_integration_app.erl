@@ -100,5 +100,7 @@ start(_StartType, _StartArgs) ->
 %% @returns `ok' always
 -spec stop(any()) -> ok.
 stop(_State) ->
-    cowboy:stop_listener(ironledger_http),
-    ok.
+    case cowboy:stop_listener(ironledger_http) of
+        ok -> ok;
+        {error, not_found} -> ok
+    end.

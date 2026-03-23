@@ -32,8 +32,13 @@ type App struct {
 	Accounts        []Account
 	Transactions    []Transaction
 	LedgerEntries   []LedgerEntry
+	SavingsProducts []SavingsProduct
+	LoanProducts    []LoanProduct
+	Loans           []Loan
+	LoanRepayments  []LoanRepayment
 	SelectedParty   *Party
 	SelectedAccount *Account
+	SelectedLoan    *Loan
 	Error           string
 	Success         string
 	Loading         bool
@@ -95,6 +100,70 @@ type LedgerEntry struct {
 	PostedAt    int64  `json:"posted_at"`
 }
 
+// SavingsProduct represents a savings product definition
+type SavingsProduct struct {
+	ProductID         string `json:"product_id"`
+	Name              string `json:"name"`
+	Description       string `json:"description"`
+	Currency          string `json:"currency"`
+	InterestRateBps   int64  `json:"interest_rate_bps"`
+	InterestType      string `json:"interest_type"`
+	CompoundingPeriod string `json:"compounding_period"`
+	MinimumBalance    int64  `json:"minimum_balance"`
+	Status            string `json:"status"`
+	CreatedAt         int64  `json:"created_at"`
+	UpdatedAt         int64  `json:"updated_at"`
+}
+
+// LoanProduct represents a loan product definition
+type LoanProduct struct {
+	ProductID       string `json:"product_id"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	Currency        string `json:"currency"`
+	MinAmount       int64  `json:"min_amount"`
+	MaxAmount       int64  `json:"max_amount"`
+	MinTermMonths   int64  `json:"min_term_months"`
+	MaxTermMonths   int64  `json:"max_term_months"`
+	InterestRateBps int64  `json:"interest_rate_bps"`
+	InterestType    string `json:"interest_type"`
+	Status          string `json:"status"`
+	CreatedAt       int64  `json:"created_at"`
+	UpdatedAt       int64  `json:"updated_at"`
+}
+
+// Loan represents a loan account
+type Loan struct {
+	LoanID             string `json:"loan_id"`
+	ProductID          string `json:"product_id"`
+	PartyID            string `json:"party_id"`
+	AccountID          string `json:"account_id"`
+	Principal          int64  `json:"principal"`
+	Currency           string `json:"currency"`
+	InterestRateBps    int64  `json:"interest_rate_bps"`
+	TermMonths         int64  `json:"term_months"`
+	MonthlyPayment     int64  `json:"monthly_payment"`
+	OutstandingBalance int64  `json:"outstanding_balance"`
+	Status             string `json:"status"`
+	DisbursedAt        int64  `json:"disbursed_at"`
+	CreatedAt          int64  `json:"created_at"`
+	UpdatedAt          int64  `json:"updated_at"`
+}
+
+// LoanRepayment represents a loan repayment record
+type LoanRepayment struct {
+	RepaymentID      string `json:"repayment_id"`
+	LoanID           string `json:"loan_id"`
+	Amount           int64  `json:"amount"`
+	PrincipalPortion int64  `json:"principal_portion"`
+	InterestPortion  int64  `json:"interest_portion"`
+	Penalty          int64  `json:"penalty"`
+	DueDate          int64  `json:"due_date"`
+	PaidAt           int64  `json:"paid_at"`
+	Status           string `json:"status"`
+	CreatedAt        int64  `json:"created_at"`
+}
+
 // BalanceResponse represents a balance response
 type BalanceResponse struct {
 	AccountID        string `json:"account_id"`
@@ -106,13 +175,17 @@ type BalanceResponse struct {
 // NewApp creates a new App instance
 func NewApp() *App {
 	return &App{
-		CurrentView:    "dashboard",
-		Parties:        []Party{},
-		Accounts:       []Account{},
-		Transactions:   []Transaction{},
-		LedgerEntries:  []LedgerEntry{},
-		RecentActivity: []ActivityItem{},
-		Stats:          DashboardStats{},
+		CurrentView:     "dashboard",
+		Parties:         []Party{},
+		Accounts:        []Account{},
+		Transactions:    []Transaction{},
+		LedgerEntries:   []LedgerEntry{},
+		SavingsProducts: []SavingsProduct{},
+		LoanProducts:    []LoanProduct{},
+		Loans:           []Loan{},
+		LoanRepayments:  []LoanRepayment{},
+		RecentActivity:  []ActivityItem{},
+		Stats:           DashboardStats{},
 	}
 }
 
@@ -163,6 +236,7 @@ func (a *App) Render() {
 		loadingDiv := doc.Call("createElement", "div")
 		loadingDiv.Set("className", "loading-spinner")
 		loadingDiv.Set("textContent", "Loading...")
+		loadingDiv.Call("setAttribute", "data-testid", "loading")
 		content.Call("appendChild", loadingDiv)
 	} else {
 		// Render error if any
@@ -170,6 +244,7 @@ func (a *App) Render() {
 			errorDiv := doc.Call("createElement", "div")
 			errorDiv.Set("className", "alert alert-error")
 			errorDiv.Set("textContent", a.Error)
+			errorDiv.Call("setAttribute", "data-testid", "error-banner")
 			content.Call("appendChild", errorDiv)
 		}
 
@@ -178,6 +253,7 @@ func (a *App) Render() {
 			successDiv := doc.Call("createElement", "div")
 			successDiv.Set("className", "alert alert-success")
 			successDiv.Set("textContent", a.Success)
+			successDiv.Call("setAttribute", "data-testid", "success-banner")
 			content.Call("appendChild", successDiv)
 		}
 
@@ -195,6 +271,10 @@ func (a *App) Render() {
 			content.Call("appendChild", a.renderTransactionsListView())
 		case "ledger":
 			content.Call("appendChild", a.renderLedgerView())
+		case "products":
+			content.Call("appendChild", a.renderProductsView())
+		case "loans":
+			content.Call("appendChild", a.renderLoansView())
 		case "settings":
 			content.Call("appendChild", a.renderSettingsView())
 		case "transfer":
@@ -235,12 +315,14 @@ func (a *App) renderSidebar() js.Value {
 		label string
 		icon  string
 	}{
-		{"dashboard", "Dashboard", "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"},
-		{"customers", "Customers", "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"},
-		{"accounts", "Accounts", "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"},
-		{"transactions", "Transactions", "M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"},
-		{"ledger", "Ledger", "M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"},
-		{"settings", "Settings", "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"},
+		{"dashboard", "Dashboard", "dashboard"},
+		{"customers", "Customers", "group"},
+		{"accounts", "Accounts", "account_balance"},
+		{"transactions", "Transactions", "swap_horiz"},
+		{"ledger", "Ledger", "book"},
+		{"products", "Products", "inventory_2"},
+		{"loans", "Loans", "request_quote"},
+		{"settings", "Settings", "settings"},
 	}
 
 	nav := doc.Call("createElement", "nav")
@@ -249,23 +331,12 @@ func (a *App) renderSidebar() js.Value {
 	for _, item := range navItems {
 		btn := doc.Call("createElement", "button")
 		btn.Set("className", "nav-item")
+		btn.Call("setAttribute", "data-testid", "nav-"+item.id)
 		if a.CurrentView == item.id {
 			btn.Get("classList").Call("add", "active")
 		}
 
-		// Icon
-		icon := doc.Call("createElement", "svg")
-		icon.Set("className", "nav-icon")
-		icon.Call("setAttribute", "fill", "none")
-		icon.Call("setAttribute", "viewBox", "0 0 24 24")
-		icon.Call("setAttribute", "stroke", "currentColor")
-		icon.Call("setAttribute", "stroke-width", "2")
-
-		path := doc.Call("createElement", "path")
-		path.Call("setAttribute", "stroke-linecap", "round")
-		path.Call("setAttribute", "stroke-linejoin", "round")
-		path.Set("d", item.icon)
-		icon.Call("appendChild", path)
+		icon := createMaterialIcon(doc, item.icon, "nav-icon")
 
 		label := doc.Call("createElement", "span")
 		label.Set("textContent", item.label)
@@ -284,9 +355,18 @@ func (a *App) renderSidebar() js.Value {
 			} else if viewName == "customers" {
 				a.ListParties(js.Value{}, nil)
 			} else if viewName == "accounts" {
+				a.ListParties(js.Value{}, nil)
 				a.ListAllAccounts(js.Value{}, nil)
 			} else if viewName == "transactions" {
 				a.ListAllTransactions(js.Value{}, nil)
+			} else if viewName == "products" {
+				a.ListSavingsProducts(js.Value{}, nil)
+				a.ListLoanProducts(js.Value{}, nil)
+			} else if viewName == "loans" {
+				a.ListParties(js.Value{}, nil)
+				a.ListAllAccounts(js.Value{}, nil)
+				a.ListLoanProducts(js.Value{}, nil)
+				a.ListLoansForSelectedParty()
 			}
 			a.Render()
 			return nil
@@ -316,6 +396,7 @@ func (a *App) renderSidebar() js.Value {
 		btn := doc.Call("createElement", "button")
 		btn.Set("className", "quick-action-btn btn btn-"+action.color)
 		btn.Set("textContent", action.label)
+		btn.Call("setAttribute", "data-testid", "quick-"+action.id)
 
 		viewName := action.id
 		btn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
@@ -357,18 +438,7 @@ func (a *App) renderHeader() js.Value {
 	refreshBtn.Set("className", "header-btn")
 	refreshBtn.Call("setAttribute", "title", "Refresh")
 
-	refreshIcon := doc.Call("createElement", "svg")
-	refreshIcon.Set("className", "header-icon")
-	refreshIcon.Call("setAttribute", "fill", "none")
-	refreshIcon.Call("setAttribute", "viewBox", "0 0 24 24")
-	refreshIcon.Call("setAttribute", "stroke", "currentColor")
-	refreshIcon.Call("setAttribute", "stroke-width", "2")
-
-	refreshPath := doc.Call("createElement", "path")
-	refreshPath.Call("setAttribute", "stroke-linecap", "round")
-	refreshPath.Call("setAttribute", "stroke-linejoin", "round")
-	refreshPath.Set("d", "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15")
-	refreshIcon.Call("appendChild", refreshPath)
+	refreshIcon := createMaterialIcon(doc, "autorenew", "header-icon")
 	refreshBtn.Call("appendChild", refreshIcon)
 
 	refreshBtn.Call("addEventListener", "click", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
@@ -397,6 +467,10 @@ func (a *App) getPageTitle() string {
 		return "Transactions"
 	case "ledger":
 		return "Ledger"
+	case "products":
+		return "Products"
+	case "loans":
+		return "Loans"
 	case "settings":
 		return "Settings"
 	case "transfer":
@@ -415,9 +489,18 @@ func (a *App) RefreshCurrentView() {
 	case "customers":
 		a.ListParties(js.Value{}, nil)
 	case "accounts":
+		a.ListParties(js.Value{}, nil)
 		a.ListAllAccounts(js.Value{}, nil)
 	case "transactions":
 		a.ListAllTransactions(js.Value{}, nil)
+	case "products":
+		a.ListSavingsProducts(js.Value{}, nil)
+		a.ListLoanProducts(js.Value{}, nil)
+	case "loans":
+		a.ListParties(js.Value{}, nil)
+		a.ListAllAccounts(js.Value{}, nil)
+		a.ListLoanProducts(js.Value{}, nil)
+		a.ListLoansForSelectedParty()
 	case "account-detail":
 		if a.SelectedAccount != nil {
 			a.GetAccountDetails(js.Value{}, []js.Value{js.ValueOf(a.SelectedAccount.AccountID)})
@@ -433,6 +516,14 @@ func capitalize(s string) string {
 	runes := []rune(s)
 	runes[0] = rune(s[0] - 32)
 	return string(runes)
+}
+
+func createMaterialIcon(doc js.Value, name string, className string) js.Value {
+	icon := doc.Call("createElement", "span")
+	icon.Set("className", className+" material-symbols-outlined")
+	icon.Set("textContent", name)
+	icon.Call("setAttribute", "aria-hidden", "true")
+	return icon
 }
 
 // fetch makes an HTTP request to the API

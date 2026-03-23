@@ -80,11 +80,11 @@ start_link() ->
 %% @param Amount The principal amount in minor units
 %% @param Currency The ISO 4217 currency code
 %% @param TermMonths The loan term in months
-%% @param InterestRate The annual interest rate (e.g., 0.05 for 5%)
+%% @param InterestRate The annual interest rate in basis points
 %%
 %% @returns {ok, loan_id()} on success, {error, term()} on failure
 %%
--spec create_loan(product_id(), binary(), binary(), amount(), atom(), integer(), float()) ->
+-spec create_loan(product_id(), binary(), binary(), amount(), atom(), integer(), non_neg_integer()) ->
     {ok, loan_id()} | {error, term()}.
 create_loan(ProductId, PartyId, AccountId, Amount, Currency, TermMonths, InterestRate) ->
     gen_server:call(?SERVER, {create_loan, ProductId, PartyId, AccountId, Amount, Currency, TermMonths, InterestRate}).
@@ -202,6 +202,7 @@ calculate_overdue_amount(LoanId) ->
 init([]) ->
     case mnesia:create_table(?TABLE, [
         {attributes, record_info(fields, loan_account)},
+        {record_name, loan_account},
         {type, set},
         {ram_copies, [node()]}
     ]) of
@@ -285,7 +286,7 @@ do_create_loan(ProductId, PartyId, AccountId, Amount, Currency, TermMonths, Inte
                         created_at = Now,
                         updated_at = Now
                     },
-                    Fun = fun() -> mnesia:write(Loan) end,
+                    Fun = fun() -> mnesia:write(?TABLE, Loan, write) end,
                     case mnesia:transaction(Fun) of
                         {atomic, _} -> {ok, LoanId};
                         {aborted, Reason} -> {error, Reason}
@@ -307,10 +308,10 @@ do_approve_loan(LoanId) ->
                             status = approved,
                             updated_at = erlang:system_time(millisecond)
                         },
-                        mnesia:write(UpdatedLoan),
+                        mnesia:write(?TABLE, UpdatedLoan, write),
                         {ok, UpdatedLoan};
-                    Status ->
-                        {error, {invalid_status, Status}}
+                    _Status ->
+                        {error, invalid_status}
                 end;
             [] ->
                 {error, not_found}
@@ -331,10 +332,10 @@ do_reject_loan(LoanId) ->
                             status = rejected,
                             updated_at = erlang:system_time(millisecond)
                         },
-                        mnesia:write(UpdatedLoan),
+                        mnesia:write(?TABLE, UpdatedLoan, write),
                         {ok, UpdatedLoan};
-                    Status ->
-                        {error, {invalid_status, Status}}
+                    _Status ->
+                        {error, invalid_status}
                 end;
             [] ->
                 {error, not_found}
@@ -357,10 +358,10 @@ do_disburse_loan(LoanId) ->
                             disbursed_at = Now,
                             updated_at = Now
                         },
-                        mnesia:write(UpdatedLoan),
+                        mnesia:write(?TABLE, UpdatedLoan, write),
                         {ok, UpdatedLoan};
-                    Status ->
-                        {error, {invalid_status, Status}}
+                    _Status ->
+                        {error, invalid_status}
                 end;
             [] ->
                 {error, not_found}
@@ -405,10 +406,10 @@ do_make_repayment(LoanId, Amount) ->
                                     end,
                             updated_at = erlang:system_time(millisecond)
                         },
-                        mnesia:write(UpdatedLoan),
+                        mnesia:write(?TABLE, UpdatedLoan, write),
                         {ok, UpdatedLoan, NewBalance};
-                    Status ->
-                        {error, {invalid_status, Status}}
+                    _Status ->
+                        {error, invalid_status}
                 end;
             [] ->
                 {error, not_found}
@@ -444,14 +445,15 @@ validate_loan_creation(_ProductId, _PartyId, _AccountId, Amount, _Currency, Term
     case Amount of
         A when A =< 0 -> {error, invalid_amount};
         A when A > 9999999999999 -> {error, amount_overflow};
-        _ -> 
+        _ ->
             case TermMonths of
                 T when T =< 0 -> {error, invalid_term};
                 T when T > 360 -> {error, term_too_long};
-                _ -> 
+                _ ->
                     case InterestRate of
-                        R when R < 0.0 -> {error, invalid_interest_rate};
-                        R when R > 1.0 -> {error, interest_rate_too_high};
+                        R when not is_integer(R) -> {error, invalid_interest_rate};
+                        R when R < 0 -> {error, invalid_interest_rate};
+                        R when R > 10000 -> {error, interest_rate_too_high};
                         _ -> ok
                     end
             end

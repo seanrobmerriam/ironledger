@@ -15,7 +15,7 @@
 %%   <li>Handler-specific state (typically an empty list)</li>
 %% </ul>
 %%
-%% Path patterns can contain binding variables using the colon syntax (e.g., 
+%% Path patterns can contain binding variables using the colon syntax (e.g.,
 %% <<":party_id">>) which capture parts of the URL. These bindings are accessible
 %% in the handler via cowboy_req:binding/2.
 %%
@@ -38,7 +38,7 @@
 %%
 %% <h2>Routing Order</h2>
 %%
-%% Routes are matched in order from top to bottom. The last route uses the 
+%% Routes are matched in order from top to bottom. The last route uses the
 %% wildcard pattern `' _'` to catch all unmatched requests and route them to
 %% cb_not_found_handler.
 %%
@@ -103,21 +103,20 @@ dispatch() ->
             {<<"/api/v1/transactions/:txn_id/entries">>, cb_transaction_entries_handler, []},
             {<<"/api/v1/accounts/:account_id/entries">>, cb_account_entries_handler, []},
 
-            %% Savings Products
-            {<<"/api/v1/savings-products">>, cb_savings_products_list_handler, []},
+            %% Savings products
+            {<<"/api/v1/savings-products">>, cb_savings_products_handler, []},
             {<<"/api/v1/savings-products/:product_id">>, cb_savings_products_handler, []},
 
-            %% Loan Products
+            %% Loan products
             {<<"/api/v1/loan-products">>, cb_loan_products_handler, []},
             {<<"/api/v1/loan-products/:product_id">>, cb_loan_products_handler, []},
 
-            %% Loans
+            %% Loans and repayments
             {<<"/api/v1/loans">>, cb_loans_handler, []},
             {<<"/api/v1/loans/:loan_id">>, cb_loans_handler, []},
             {<<"/api/v1/loans/:loan_id/approve">>, cb_loans_handler, []},
             {<<"/api/v1/loans/:loan_id/disburse">>, cb_loans_handler, []},
             {<<"/api/v1/loans/:loan_id/repayments">>, cb_loan_repayments_handler, []},
-            {<<"/api/v1/loans/:loan_id/repay">>, cb_loan_repayments_handler, []},
 
             %% 404 fallback
             {'_', cb_not_found_handler, []}

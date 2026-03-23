@@ -26,7 +26,7 @@
 %%%     <<"High-Yield Savings">>,
 %%%     <<"4.5% APY, daily compounding, $100 minimum balance">>,
 %%%     'USD',
-%%%     0.045,
+%%%     450,
 %%%     compound,
 %%%     daily,
 %%%     10000
@@ -69,7 +69,7 @@
 %%% @param Name Human-readable name for the product
 %%% @param Description Detailed description of product terms
 %%% @param Currency ISO 4217 currency code (atom)
-%%% @param InterestRate Annual interest rate as decimal (e.g., 0.05 = 5%)
+%%% @param InterestRate Annual interest rate in basis points (e.g., 500 = 5.00%)
 %%% @param InterestType Type of interest calculation: `simple` or `compound`
 %%% @param CompoundingPeriod How often interest compounds: `daily`, `monthly`, `quarterly`, `annually`
 %%% @param MinimumBalance Minimum balance in minor units to earn interest
@@ -86,7 +86,7 @@
 %%%     <<"Basic Savings">>,
 %%%     <<"Simple savings account with competitive rates">>,
 %%%     'USD',
-%%%     0.001,
+%%%     10,
 %%%     simple,
 %%%     monthly,
 %%%     0
@@ -96,13 +96,15 @@
     Name        :: binary(),
     Description :: binary(),
     Currency    :: atom(),
-    InterestRate :: float(),
+    InterestRate :: non_neg_integer(),
     InterestType :: atom(),
     CompoundingPeriod :: atom(),
     MinimumBalance :: integer()
 ) -> {ok, savings_product()} | {error, atom()}.
-create_product(Name, Description, Currency, InterestRate, InterestType, CompoundingPeriod, MinimumBalance) 
-        when is_binary(Name), is_binary(Description), is_integer(MinimumBalance), MinimumBalance >= 0 ->
+create_product(Name, Description, Currency, InterestRate, InterestType, CompoundingPeriod, MinimumBalance)
+        when is_binary(Name), is_binary(Description),
+             is_integer(InterestRate), InterestRate >= 0, InterestRate =< 10000,
+             is_integer(MinimumBalance), MinimumBalance >= 0 ->
     case lists:member(Currency, ?VALID_CURRENCIES) of
         true ->
             case lists:member(InterestType, ?VALID_INTEREST_TYPES) of

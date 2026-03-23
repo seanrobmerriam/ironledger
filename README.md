@@ -2,16 +2,20 @@
 
 A core banking application built with Erlang/OTP 25.3, featuring double-entry bookkeeping, REST API, and a WebAssembly dashboard.
 
+Documentation can be found here:
+
+https://beautiful-blancmange-5d7079.netlify.app/
+
 ## Overview
 
-IronLedger is a prototype core banking system that demonstrates:
+IronLedger is a Dockerized core banking system that provides:
 
 - **Party Management**: Customer onboarding with KYC data
 - **Account Management**: Multi-currency accounts with lifecycle states
 - **Double-Entry Ledger**: Immutable financial transaction recording
 - **Payment Processing**: Transfers, deposits, and withdrawals with idempotency
 - **REST API**: Cowboy-based HTTP interface
-- **WebAssembly Dashboard**: Go-compiled browser UI
+- **WebAssembly Dashboard**: Go-compiled browser UI with locally packaged fonts and icons
 
 ## Architecture
 
@@ -98,6 +102,7 @@ Comprehensive module documentation is available in two formats:
 ### HTML Documentation
 
 A browsable HTML documentation website is available in `docs/website/`. Open `docs/website/index.html` in a browser for an interactive documentation experience.
+The current release-candidate validation evidence is documented in `docs/release-checklist-1-0.md`.
 
 ### OTP Application Structure
 
@@ -124,7 +129,9 @@ All active applications implement the `application` behaviour with:
 
 - Erlang/OTP 25.3 or later
 - rebar3 (Erlang build tool)
-- Go 1.21+ (for dashboard compilation)
+- Go 1.25.7+ (for dashboard compilation)
+- Node.js + npm (only for local browser E2E validation)
+- Docker and Docker Compose (for packaged local deployment)
 
 ### Build
 
@@ -137,7 +144,30 @@ cd apps/cb_dashboard
 GOARCH=wasm GOOS=js go build -o dist/ironledger.wasm .
 ```
 
+### Run with Docker Compose
+
+```bash
+docker compose up --build
+
+# Dashboard: http://localhost:8080
+# API:       http://localhost:8081/api/v1
+```
+
+The compose setup starts:
+- `api` on port `8081`
+- `dashboard` on port `8080`
+- a named Docker volume for Mnesia data at `/tmp/ironledger_mnesia`
+
+The dashboard image serves all required static assets locally, including:
+- `ironledger.wasm`
+- `wasm_exec.js`
+- `Google Sans Flex`
+- `Material Symbols Outlined`
+
 ### Run Tests
+
+All rebar3 test commands should be run from the ironledger root directory
+
 
 ```bash
 # Run all Common Test suites
@@ -151,6 +181,11 @@ rebar3 proper
 
 # Full verification (must pass before commits)
 rebar3 dialyzer && rebar3 ct && rebar3 proper
+
+# Browser E2E verification for the packaged dashboard
+npm install
+npx playwright install chromium
+npm run test:e2e
 ```
 
 ### Start the Application
@@ -175,6 +210,11 @@ _build/default/rel/ironledger/bin/ironledger foreground
 # Or start in daemon mode
 _build/default/rel/ironledger/bin/ironledger start
 ```
+
+### Release Evidence
+
+The current 1.0 release-candidate checklist and command evidence live in
+`docs/release-checklist-1-0.md`.
 
 ### Configuration
 

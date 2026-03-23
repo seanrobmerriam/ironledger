@@ -41,7 +41,7 @@ product_to_json(Product) ->
         name => Product#savings_product.name,
         description => Product#savings_product.description,
         currency => Product#savings_product.currency,
-        interest_rate => Product#savings_product.interest_rate,
+        interest_rate_bps => Product#savings_product.interest_rate,
         interest_type => Product#savings_product.interest_type,
         compounding_period => Product#savings_product.compounding_period,
         minimum_balance => Product#savings_product.minimum_balance,

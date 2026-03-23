@@ -12,7 +12,10 @@
                   cb_ledger,
                   cb_party,
                   cb_accounts,
-                  cb_payments
+                  cb_payments,
+                  cb_savings_products,
+                  cb_loans,
+                  cb_interest
                  ]},
   {env, []},
   {modules, []},

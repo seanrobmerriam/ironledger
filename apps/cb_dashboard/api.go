@@ -6,7 +6,20 @@ import (
 	"syscall/js"
 )
 
-const apiBaseURL = "http://127.0.0.1:8081/api/v1"
+var apiBaseURL = resolveAPIBaseURL()
+
+func resolveAPIBaseURL() string {
+	location := js.Global().Get("window").Get("location")
+	protocol := location.Get("protocol").String()
+	hostname := location.Get("hostname").String()
+	if protocol == "" {
+		protocol = "http:"
+	}
+	if hostname == "" {
+		hostname = "127.0.0.1"
+	}
+	return fmt.Sprintf("%s//%s:8081/api/v1", protocol, hostname)
+}
 
 // StatsResponse represents the dashboard stats response
 type StatsResponse struct {
@@ -106,9 +119,11 @@ func (a *App) CreateParty(this js.Value, args []js.Value) interface{} {
 		if err != nil {
 			logMsg(ERROR, "API request failed", map[string]interface{}{"error": err.Error()})
 			a.Error = err.Error()
+			a.Success = ""
 		} else {
 			logMsg(INFO, "API request succeeded", map[string]interface{}{"action": "createParty"})
 			a.Error = ""
+			a.Success = "Customer created"
 			a.ListParties(js.Value{}, nil)
 		}
 		a.Render()
@@ -130,6 +145,13 @@ func (a *App) ListParties(this js.Value, args []js.Value) interface{} {
 			// Parse result using JSON.stringify to properly convert JS array to JSON
 			itemsJSON := js.Global().Get("JSON").Call("stringify", result.Get("items")).String()
 			json.Unmarshal([]byte(itemsJSON), &a.Parties)
+			if a.SelectedParty == nil && len(a.Parties) > 0 {
+				party := a.Parties[0]
+				a.SelectedParty = &party
+				if a.CurrentView == "loans" {
+					a.ListLoansForSelectedParty()
+				}
+			}
 			logMsg(INFO, "API request succeeded", map[string]interface{}{"action": "listParties", "count": len(a.Parties)})
 		}
 		a.Render()
@@ -202,9 +224,12 @@ func (a *App) CreateAccount(this js.Value, args []js.Value) interface{} {
 		_, err := fetch("POST", apiBaseURL+"/accounts", body)
 		if err != nil {
 			a.Error = err.Error()
+			a.Success = ""
 		} else {
 			a.Error = ""
-			a.ListAccounts(js.Value{}, []js.Value{js.ValueOf(partyID)})
+			a.Success = "Account created"
+			a.ListParties(js.Value{}, nil)
+			a.ListAllAccounts(js.Value{}, nil)
 		}
 		a.Render()
 	}()
@@ -753,6 +778,299 @@ func (a *App) GetAccountDetails(this js.Value, args []js.Value) interface{} {
 		}
 
 		a.Loading = false
+		a.Render()
+	}()
+
+	return nil
+}
+
+// ListSavingsProducts fetches all savings products
+func (a *App) ListSavingsProducts(this js.Value, args []js.Value) interface{} {
+	go func() {
+		result, err := fetch("GET", apiBaseURL+"/savings-products", nil)
+		if err != nil {
+			a.Error = err.Error()
+		} else {
+			a.Error = ""
+			itemsJSON := js.Global().Get("JSON").Call("stringify", result.Get("items")).String()
+			json.Unmarshal([]byte(itemsJSON), &a.SavingsProducts)
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// CreateSavingsProduct creates a new savings product
+func (a *App) CreateSavingsProduct(this js.Value, args []js.Value) interface{} {
+	if len(args) < 7 {
+		return nil
+	}
+
+	body := map[string]interface{}{
+		"name":               args[0].String(),
+		"description":        args[1].String(),
+		"currency":           args[2].String(),
+		"interest_rate_bps":  args[3].Int(),
+		"interest_type":      args[4].String(),
+		"compounding_period": args[5].String(),
+		"minimum_balance":    args[6].Int(),
+	}
+
+	go func() {
+		_, err := fetch("POST", apiBaseURL+"/savings-products", body)
+		if err != nil {
+			a.Error = err.Error()
+			a.Success = ""
+		} else {
+			a.Error = ""
+			a.Success = "Savings product created"
+			a.ListSavingsProducts(js.Value{}, nil)
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// ListLoanProducts fetches all loan products
+func (a *App) ListLoanProducts(this js.Value, args []js.Value) interface{} {
+	go func() {
+		result, err := fetch("GET", apiBaseURL+"/loan-products", nil)
+		if err != nil {
+			a.Error = err.Error()
+		} else {
+			a.Error = ""
+			itemsJSON := js.Global().Get("JSON").Call("stringify", result.Get("items")).String()
+			json.Unmarshal([]byte(itemsJSON), &a.LoanProducts)
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// CreateLoanProduct creates a new loan product
+func (a *App) CreateLoanProduct(this js.Value, args []js.Value) interface{} {
+	if len(args) < 9 {
+		return nil
+	}
+
+	body := map[string]interface{}{
+		"name":              args[0].String(),
+		"description":       args[1].String(),
+		"currency":          args[2].String(),
+		"min_amount":        args[3].Int(),
+		"max_amount":        args[4].Int(),
+		"min_term_months":   args[5].Int(),
+		"max_term_months":   args[6].Int(),
+		"interest_rate_bps": args[7].Int(),
+		"interest_type":     args[8].String(),
+	}
+
+	go func() {
+		_, err := fetch("POST", apiBaseURL+"/loan-products", body)
+		if err != nil {
+			a.Error = err.Error()
+			a.Success = ""
+		} else {
+			a.Error = ""
+			a.Success = "Loan product created"
+			a.ListLoanProducts(js.Value{}, nil)
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// ListLoans fetches loans for a specific party
+func (a *App) ListLoans(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return nil
+	}
+
+	partyID := args[0].String()
+
+	go func() {
+		result, err := fetch("GET", apiBaseURL+"/loans?party_id="+partyID, nil)
+		if err != nil {
+			a.Error = err.Error()
+		} else {
+			a.Error = ""
+			itemsJSON := js.Global().Get("JSON").Call("stringify", result.Get("items")).String()
+			json.Unmarshal([]byte(itemsJSON), &a.Loans)
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// ListLoansForSelectedParty refreshes loans for the selected party when present
+func (a *App) ListLoansForSelectedParty() {
+	if a.SelectedParty != nil {
+		a.ListLoans(js.Value{}, []js.Value{js.ValueOf(a.SelectedParty.PartyID)})
+	}
+}
+
+// CreateLoan creates a new loan application
+func (a *App) CreateLoan(this js.Value, args []js.Value) interface{} {
+	if len(args) < 5 {
+		return nil
+	}
+
+	partyID := args[0].String()
+	body := map[string]interface{}{
+		"party_id":    partyID,
+		"product_id":  args[1].String(),
+		"account_id":  args[2].String(),
+		"principal":   args[3].Int(),
+		"term_months": args[4].Int(),
+	}
+
+	go func() {
+		_, err := fetch("POST", apiBaseURL+"/loans", body)
+		if err != nil {
+			a.Error = err.Error()
+			a.Success = ""
+		} else {
+			a.Error = ""
+			a.Success = "Loan created"
+			a.ListLoans(js.Value{}, []js.Value{js.ValueOf(partyID)})
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// ApproveLoan approves a pending loan
+func (a *App) ApproveLoan(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return nil
+	}
+
+	loanID := args[0].String()
+
+	go func() {
+		_, err := fetch("POST", apiBaseURL+"/loans/"+loanID+"/approve", nil)
+		if err != nil {
+			a.Error = err.Error()
+			a.Success = ""
+		} else {
+			a.Error = ""
+			a.Success = "Loan approved"
+			a.ListLoansForSelectedParty()
+			if a.SelectedLoan != nil && a.SelectedLoan.LoanID == loanID {
+				a.GetLoan(js.Value{}, []js.Value{js.ValueOf(loanID)})
+			}
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// DisburseLoan disburses an approved loan
+func (a *App) DisburseLoan(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return nil
+	}
+
+	loanID := args[0].String()
+
+	go func() {
+		_, err := fetch("POST", apiBaseURL+"/loans/"+loanID+"/disburse", nil)
+		if err != nil {
+			a.Error = err.Error()
+			a.Success = ""
+		} else {
+			a.Error = ""
+			a.Success = "Loan disbursed"
+			a.ListLoansForSelectedParty()
+			if a.SelectedLoan != nil && a.SelectedLoan.LoanID == loanID {
+				a.GetLoan(js.Value{}, []js.Value{js.ValueOf(loanID)})
+			}
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// GetLoan fetches a single loan and marks it as selected
+func (a *App) GetLoan(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return nil
+	}
+
+	loanID := args[0].String()
+
+	go func() {
+		result, err := fetch("GET", apiBaseURL+"/loans/"+loanID, nil)
+		if err != nil {
+			a.Error = err.Error()
+		} else {
+			a.Error = ""
+			var loan Loan
+			resultJSON := js.Global().Get("JSON").Call("stringify", result).String()
+			json.Unmarshal([]byte(resultJSON), &loan)
+			a.SelectedLoan = &loan
+			a.ListLoanRepayments(js.Value{}, []js.Value{js.ValueOf(loanID)})
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// ListLoanRepayments fetches repayments for a loan
+func (a *App) ListLoanRepayments(this js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return nil
+	}
+
+	loanID := args[0].String()
+
+	go func() {
+		result, err := fetch("GET", apiBaseURL+"/loans/"+loanID+"/repayments", nil)
+		if err != nil {
+			a.Error = err.Error()
+		} else {
+			a.Error = ""
+			itemsJSON := js.Global().Get("JSON").Call("stringify", result.Get("items")).String()
+			json.Unmarshal([]byte(itemsJSON), &a.LoanRepayments)
+		}
+		a.Render()
+	}()
+
+	return nil
+}
+
+// RecordLoanRepayment posts a repayment for a loan
+func (a *App) RecordLoanRepayment(this js.Value, args []js.Value) interface{} {
+	if len(args) < 3 {
+		return nil
+	}
+
+	loanID := args[0].String()
+	body := map[string]interface{}{
+		"amount":       args[1].Int(),
+		"payment_type": args[2].String(),
+	}
+
+	go func() {
+		_, err := fetch("POST", apiBaseURL+"/loans/"+loanID+"/repayments", body)
+		if err != nil {
+			a.Error = err.Error()
+			a.Success = ""
+		} else {
+			a.Error = ""
+			a.Success = "Repayment recorded"
+			a.ListLoansForSelectedParty()
+			a.GetLoan(js.Value{}, []js.Value{js.ValueOf(loanID)})
+		}
 		a.Render()
 	}()
 

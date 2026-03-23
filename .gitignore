@@ -29,6 +29,11 @@ erl_crash.dump
 apps/cb_dashboard/dist/*.wasm
 apps/cb_dashboard/dist/wasm_exec.js
 
+# Node / browser automation
+node_modules/
+playwright-report/
+test-results/
+
 # IDE
 .vscode/
 .idea/
@@ -54,5 +59,5 @@ logs/
 ct_logs/
 .test/
 
-# Docs
-docs/
+# Non-public Tests
+non-public-tests/

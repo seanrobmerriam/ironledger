@@ -7,9 +7,9 @@
 -spec init(cowboy_req:req(), any()) -> {ok, cowboy_req:req(), any()}.
 init(Req, State) ->
     Method = cowboy_req:method(Req),
-    AccountId = cowboy_req:binding(<<"account_id">>, Req),
-    Page = binary_to_integer(cowboy_req:binding(<<"page">>, Req, <<"1">>)),
-    PageSize = binary_to_integer(cowboy_req:binding(<<"page_size">>, Req, <<"20">>)),
+    AccountId = cowboy_req:binding(account_id, Req),
+    Page = query_int(Req, <<"page">>, 1),
+    PageSize = query_int(Req, <<"page_size">>, 20),
     handle(Method, AccountId, Page, PageSize, Req, State).
 
 handle(<<"GET">>, AccountId, Page, PageSize, Req, State) ->
@@ -52,3 +52,10 @@ entry_to_json(Entry) ->
         description => Entry#ledger_entry.description,
         posted_at => Entry#ledger_entry.posted_at
     }.
+
+query_int(Req, Key, Default) ->
+    Qs = cowboy_req:parse_qs(Req),
+    case proplists:get_value(Key, Qs) of
+        undefined -> Default;
+        Value -> binary_to_integer(Value)
+    end.

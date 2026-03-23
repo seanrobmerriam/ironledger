@@ -62,7 +62,7 @@
 %%   <li><b>max_amount</b>: Maximum principal amount allowed (minor units)</li>
 %%   <li><b>min_term_months</b>: Minimum loan term in months</li>
 %%   <li><b>max_term_months</b>: Maximum loan term in months</li>
-%%   <li><b>interest_rate</b>: Annual interest rate (e.g., 0.05 = 5%)</li>
+%%   <li><b>interest_rate</b>: Annual interest rate in basis points (e.g., 500 = 5.00%)</li>
 %%   <li><b>interest_type</b>: 'flat' or 'declining' (amortizing)</li>
 %%   <li><b>status</b>: 'active' or 'inactive' product status</li>
 %%   <li><b>created_at</b>: Creation timestamp (milliseconds since epoch)</li>
@@ -78,7 +78,7 @@
     max_amount :: integer(),
     min_term_months :: integer(),
     max_term_months :: integer(),
-    interest_rate :: float(),
+    interest_rate :: non_neg_integer(),
     interest_type :: atom(),
     status :: atom(),
     created_at :: integer(),
@@ -100,7 +100,7 @@
 %%   <li><b>account_id</b>: Disbursement account for funds</li>
 %%   <li><b>principal</b>: Original principal amount (minor units)</li>
 %%   <li><b>currency</b>: ISO 4217 currency code</li>
-%%   <li><b>interest_rate</b>: Annual interest rate applied</li>
+%%   <li><b>interest_rate</b>: Annual interest rate applied in basis points</li>
 %%   <li><b>term_months</b>: Loan term in months</li>
 %%   <li><b>monthly_payment</b>: Calculated monthly payment amount</li>
 %%   <li><b>outstanding_balance</b>: Remaining principal to repay</li>
@@ -117,7 +117,7 @@
     account_id :: binary(),
     principal :: integer(),
     currency :: atom(),
-    interest_rate :: float(),
+    interest_rate :: non_neg_integer(),
     term_months :: integer(),
     monthly_payment :: integer(),
     outstanding_balance :: integer(),
@@ -204,4 +204,4 @@
 %%
 %% Unique UUID binary identifier for a repayment record.
 %%
--type repayment_id() :: binary().    
+-type repayment_id() :: binary().

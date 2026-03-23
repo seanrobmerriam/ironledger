@@ -52,6 +52,7 @@
 
 -define(SERVER, ?MODULE).
 -define(TABLE, loan_products).
+-define(BPS_FACTOR, 10000).
 
 -record(state, {}).
 
@@ -86,7 +87,7 @@ start_link() ->
 %%
 %% @returns {ok, product_id()} on success, {error, term()} on failure
 %%
--spec create_product(binary(), binary(), atom(), integer(), integer(), integer(), integer(), float(), atom()) ->
+-spec create_product(binary(), binary(), atom(), integer(), integer(), integer(), integer(), non_neg_integer(), atom()) ->
     {ok, product_id()} | {error, term()}.
 create_product(Name, Description, Currency, MinAmount, MaxAmount, MinTermMonths, MaxTermMonths, InterestRate, InterestType) ->
     gen_server:call(?SERVER, {create_product, Name, Description, Currency, MinAmount, MaxAmount, MinTermMonths, MaxTermMonths, InterestRate, InterestType}).
@@ -146,6 +147,7 @@ deactivate_product(ProductId) ->
 init([]) ->
     case mnesia:create_table(?TABLE, [
         {attributes, record_info(fields, loan_product)},
+        {record_name, loan_product},
         {type, set},
         {ram_copies, [node()]}
     ]) of
@@ -193,8 +195,9 @@ code_change(_OldVsn, State, _Extra) ->
 do_create_product(Name, Description, Currency, MinAmount, MaxAmount, MinTermMonths, MaxTermMonths, InterestRate, InterestType) ->
     ValidCurrency = validate_currency(Currency),
     ValidInterestType = validate_interest_type(InterestType),
-    case {ValidCurrency, ValidInterestType} of
-        {ok, ok} ->
+    ValidInterestRate = validate_interest_rate(InterestRate),
+    case {ValidCurrency, ValidInterestType, ValidInterestRate} of
+        {ok, ok, ok} ->
             ProductId = uuid:uuid_to_string(uuid:get_v4(), binary_standard),
             Now = erlang:system_time(millisecond),
             Product = #loan_product{
@@ -212,17 +215,17 @@ do_create_product(Name, Description, Currency, MinAmount, MaxAmount, MinTermMont
                 created_at = Now,
                 updated_at = Now
             },
-            Fun = fun() -> mnesia:write(Product) end,
+            Fun = fun() -> mnesia:write(?TABLE, Product, write) end,
             case mnesia:transaction(Fun) of
                 {atomic, _} -> {ok, ProductId};
                 {aborted, Reason} -> {error, Reason}
             end;
-        {{error, _} = CurrencyError, ok} ->
+        {{error, _} = CurrencyError, _, _} ->
             CurrencyError;
-        {ok, {error, _} = InterestError} ->
-            InterestError;
-        {{error, _} = CurrencyError, {error, _}} ->
-            CurrencyError
+        {ok, {error, _} = InterestTypeError, _} ->
+            InterestTypeError;
+        {ok, ok, {error, _} = InterestRateError} ->
+            InterestRateError
     end.
 
 do_get_product(ProductId) ->
@@ -243,7 +246,7 @@ do_update_product(ProductId, Updates) ->
         case mnesia:read({?TABLE, ProductId}) of
             [Product] ->
                 UpdatedProduct = apply_updates(Product, Updates),
-                mnesia:write(UpdatedProduct),
+                mnesia:write(?TABLE, UpdatedProduct, write),
                 {ok, UpdatedProduct};
             [] ->
                 {error, not_found}
@@ -286,3 +289,12 @@ validate_interest_type(InterestType) ->
         true -> ok;
         false -> {error, invalid_interest_type}
     end.
+
+validate_interest_rate(InterestRate) when not is_integer(InterestRate) ->
+    {error, invalid_interest_rate};
+validate_interest_rate(InterestRate) when InterestRate < 0 ->
+    {error, invalid_interest_rate};
+validate_interest_rate(InterestRate) when InterestRate > ?BPS_FACTOR ->
+    {error, interest_rate_too_high};
+validate_interest_rate(_InterestRate) ->
+    ok.

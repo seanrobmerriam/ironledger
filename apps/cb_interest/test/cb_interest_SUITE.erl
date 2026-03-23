@@ -150,14 +150,14 @@ end_per_testcase(_TestCase, _Config) ->
 
 %% Test: Calculate daily rate from annual rate
 calculate_daily_rate_ok(_Config) ->
-    DailyRate = cb_interest:calculate_daily_rate(0.10),  % 10% annual
-    Expected = 0.10 / 365,
+    DailyRate = cb_interest:calculate_daily_rate(1000),
+    Expected = (1000 * 100000) div 365,
     ?assertEqual(Expected, DailyRate),
     ok.
 
 %% Test: Calculate simple interest (uses higher balance to ensure non-zero result)
 calculate_interest_ok(_Config) ->
-    DailyRate = cb_interest:calculate_daily_rate(0.10),  % 10% annual
+    DailyRate = cb_interest:calculate_daily_rate(1000),
     Interest = cb_interest:calculate_interest(1000000, DailyRate, 30),  % $10000 for 30 days
     ?assert(is_integer(Interest)),
     ?assert(Interest >= 0),
@@ -165,28 +165,28 @@ calculate_interest_ok(_Config) ->
 
 %% Test: Calculate compound interest - daily compounding
 calculate_compound_interest_daily(_Config) ->
-    Result = cb_interest:calculate_compound_interest(10000, 0.10, 30, daily),
+    Result = cb_interest:calculate_compound_interest(10000, 1000, 30, daily),
     ?assert(is_integer(Result)),
     ?assert(Result >= 10000),  % Should be at least principal
     ok.
 
 %% Test: Calculate compound interest - monthly compounding
 calculate_compound_interest_monthly(_Config) ->
-    Result = cb_interest:calculate_compound_interest(10000, 0.10, 60, monthly),
+    Result = cb_interest:calculate_compound_interest(10000, 1000, 60, monthly),
     ?assert(is_integer(Result)),
     ?assert(Result >= 10000),
     ok.
 
 %% Test: Calculate compound interest - quarterly compounding
 calculate_compound_interest_quarterly(_Config) ->
-    Result = cb_interest:calculate_compound_interest(10000, 0.10, 182, quarterly),  % 2 quarters = ~182 days
+    Result = cb_interest:calculate_compound_interest(10000, 1000, 182, quarterly),
     ?assert(is_integer(Result)),
     ?assert(Result >= 10000),
     ok.
 
 %% Test: Calculate compound interest - annually compounding
 calculate_compound_interest_annually(_Config) ->
-    Result = cb_interest:calculate_compound_interest(10000, 0.10, 365, annually),
+    Result = cb_interest:calculate_compound_interest(10000, 1000, 365, annually),
     ?assert(is_integer(Result)),
     ?assert(Result >= 10000),
     ok.
@@ -209,27 +209,26 @@ float_to_basis_points_ok(_Config) ->
 
 %% Test: Calculate daily rate with invalid input (negative rate throws)
 calculate_daily_rate_invalid(_Config) ->
-    %% Negative rate throws function_clause as there's no guard for it
-    ?assertError(function_clause, cb_interest:calculate_daily_rate(-0.10)),
+    ?assertError(function_clause, cb_interest:calculate_daily_rate(-10)),
     ok.
 
 %% Test: Calculate interest with zero balance
 calculate_interest_zero_balance(_Config) ->
-    DailyRate = cb_interest:calculate_daily_rate(0.10),
+    DailyRate = cb_interest:calculate_daily_rate(1000),
     Interest = cb_interest:calculate_interest(0, DailyRate, 30),
     ?assertEqual(0, Interest),
     ok.
 
 %% Test: Calculate interest with zero days
 calculate_interest_zero_days(_Config) ->
-    DailyRate = cb_interest:calculate_daily_rate(0.10),
+    DailyRate = cb_interest:calculate_daily_rate(1000),
     Interest = cb_interest:calculate_interest(10000, DailyRate, 0),
     ?assertEqual(0, Interest),
     ok.
 
 %% Test: Calculate compound interest with zero days
 calculate_compound_interest_zero_days(_Config) ->
-    Result = cb_interest:calculate_compound_interest(10000, 0.10, 0, daily),
+    Result = cb_interest:calculate_compound_interest(10000, 1000, 0, daily),
     ?assertEqual(10000, Result),  % Should return principal unchanged
     ok.
 
@@ -263,10 +262,10 @@ start_accrual_ok(_Config) ->
         Account#account.account_id,
         <<"product-1">>,
         10000,
-        0.05
+        500
     ),
     ?assertEqual(Account#account.account_id, Accrual#interest_accrual.account_id),
-    ?assertEqual(0.05, Accrual#interest_accrual.interest_rate),
+    ?assertEqual(500, Accrual#interest_accrual.interest_rate),
     ?assertEqual(accruing, Accrual#interest_accrual.status),
     ok.
 
@@ -277,7 +276,7 @@ start_accrual_account_not_found(_Config) ->
         FakeId,
         <<"product-1">>,
         10000,
-        0.05
+        500
     ),
     ?assertEqual(account_not_found, Reason),
     ok.
@@ -290,7 +289,7 @@ start_accrual_account_closed(_Config) ->
         Account#account.account_id,
         <<"product-1">>,
         10000,
-        0.05
+        500
     ),
     ?assertEqual(account_closed, Reason),
     ok.
@@ -302,7 +301,7 @@ get_accrual_ok(_Config) ->
         Account#account.account_id,
         <<"product-1">>,
         10000,
-        0.05
+        500
     ),
     {ok, Retrieved} = cb_interest_accrual:get_accrual(Created#interest_accrual.accrual_id),
     ?assertEqual(Created#interest_accrual.accrual_id, Retrieved#interest_accrual.accrual_id),
@@ -322,7 +321,7 @@ close_accrual_ok(_Config) ->
         Account#account.account_id,
         <<"product-1">>,
         10000,
-        0.05
+        500
     ),
     {ok, Closed} = cb_interest_accrual:close_accrual(Created#interest_accrual.accrual_id),
     ?assertEqual(closed, Closed#interest_accrual.status),
@@ -341,9 +340,9 @@ get_active_accruals_ok(_Config) ->
     Account1 = create_test_account(_Config),
     Account2 = create_test_account(_Config),
     {ok, _A1} = cb_interest_accrual:start_accrual(
-        Account1#account.account_id, <<"p1">>, 10000, 0.05),
+        Account1#account.account_id, <<"p1">>, 10000, 500),
     {ok, _A2} = cb_interest_accrual:start_accrual(
-        Account2#account.account_id, <<"p2">>, 20000, 0.03),
+        Account2#account.account_id, <<"p2">>, 20000, 300),
 
     Accruals = cb_interest_accrual:get_active_accruals(),
     ?assertEqual(2, length(Accruals)),
@@ -353,9 +352,9 @@ get_active_accruals_ok(_Config) ->
 get_accruals_for_account_ok(_Config) ->
     Account = create_test_account(_Config),
     {ok, _A1} = cb_interest_accrual:start_accrual(
-        Account#account.account_id, <<"p1">>, 10000, 0.05),
+        Account#account.account_id, <<"p1">>, 10000, 500),
     {ok, _A2} = cb_interest_accrual:start_accrual(
-        Account#account.account_id, <<"p2">>, 20000, 0.03),
+        Account#account.account_id, <<"p2">>, 20000, 300),
 
     Accruals = cb_interest_accrual:get_accruals_for_account(Account#account.account_id),
     ?assertEqual(2, length(Accruals)),
@@ -368,7 +367,7 @@ calculate_daily_accrual_ok(_Config) ->
         Account#account.account_id,
         <<"product-1">>,
         10000,
-        0.05  % 5% annual rate
+        500
     ),
 
     DailyAccrual = cb_interest_accrual:calculate_daily_accrual(
